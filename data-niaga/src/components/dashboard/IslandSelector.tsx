@@ -1,0 +1,35 @@
+import { ISLANDS, Island } from '@/lib/mockData';
+import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
+import { MapPin } from 'lucide-react';
+
+interface IslandSelectorProps {
+  selected: Island;
+  onChange: (island: Island) => void;
+  className?: string;
+}
+
+export function IslandSelector({ selected, onChange, className }: IslandSelectorProps) {
+  return (
+    <div className={cn('flex items-center gap-2 flex-wrap', className)}>
+      <div className="flex items-center gap-1.5 text-sm text-muted-foreground mr-2">
+        <MapPin className="w-4 h-4" />
+        <span className="font-medium">Region:</span>
+      </div>
+      {ISLANDS.map((island) => (
+        <Button
+          key={island}
+          variant={selected === island ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => onChange(island)}
+          className={cn(
+            'text-xs h-8',
+            selected === island && 'shadow-glow'
+          )}
+        >
+          {island}
+        </Button>
+      ))}
+    </div>
+  );
+}

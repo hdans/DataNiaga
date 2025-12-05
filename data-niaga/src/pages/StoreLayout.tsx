@@ -1,0 +1,157 @@
+import { useState, useMemo } from 'react';
+import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { IslandSelector } from '@/components/dashboard/IslandSelector';
+import { Island, mbaRules, ProductCategory } from '@/lib/mockData';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { MapPin, ArrowRight, Sparkles, LayoutGrid } from 'lucide-react';
+import { cn } from '@/lib/utils';
+
+interface LayoutSuggestion {
+  product1: ProductCategory;
+  product2: ProductCategory;
+  lift: number;
+  confidence: number;
+  recommendation: string;
+}
+
+export default function StoreLayout() {
+  const [selectedIsland, setSelectedIsland] = useState<Island>('JAWA, BALI, & NT');
+
+  const layoutSuggestions = useMemo(() => {
+    const suggestions: LayoutSuggestion[] = mbaRules
+      .filter((r) => r.pulau === selectedIsland && r.lift >= 2.0)
+      .map((rule) => ({
+        product1: rule.antecedent,
+        product2: rule.consequent,
+        lift: rule.lift,
+        confidence: rule.confidence,
+        recommendation: rule.lift >= 3.5
+          ? 'Place adjacent - Very strong correlation'
+          : rule.lift >= 2.5
+          ? 'Place nearby - Strong correlation'
+          : 'Consider proximity - Moderate correlation',
+      }))
+      .sort((a, b) => b.lift - a.lift);
+
+    return suggestions;
+  }, [selectedIsland]);
+
+  // Create a simple store layout visualization
+  const layoutGrid = useMemo(() => {
+    const categories = [...new Set(layoutSuggestions.flatMap((s) => [s.product1, s.product2]))];
+    return categories.slice(0, 8);
+  }, [layoutSuggestions]);
+
+  const getLiftColor = (lift: number) => {
+    if (lift >= 3.5) return 'border-success bg-success/10 text-success';
+    if (lift >= 2.5) return 'border-primary bg-primary/10 text-primary';
+    return 'border-warning bg-warning/10 text-warning';
+  };
+
+  return (
+    <DashboardLayout>
+      <div className="p-6 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Store Layout Optimizer</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Product placement suggestions based on purchase correlations
+            </p>
+          </div>
+          <IslandSelector selected={selectedIsland} onChange={setSelectedIsland} />
+        </div>
+
+        {/* Layout Visualization */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <LayoutGrid className="w-5 h-5" />
+              Suggested Store Layout
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {layoutGrid.map((category, idx) => {
+                const hasStrongPair = layoutSuggestions.some(
+                  (s) =>
+                    (s.product1 === category || s.product2 === category) &&
+                    s.lift >= 3.0
+                );
+                return (
+                  <div
+                    key={category}
+                    className={cn(
+                      'p-4 rounded-xl border-2 text-center transition-all',
+                      hasStrongPair
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-border bg-muted/30'
+                    )}
+                  >
+                    <div className="text-xs text-muted-foreground mb-1">Zone {idx + 1}</div>
+                    <div className="font-semibold text-sm text-foreground">{category}</div>
+                    {hasStrongPair && (
+                      <Sparkles className="w-4 h-4 text-primary mx-auto mt-2" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-4 text-center">
+              Products with strong correlations should be placed in adjacent zones
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Placement Suggestions */}
+        <div>
+          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+            <MapPin className="w-5 h-5 text-primary" />
+            Placement Recommendations
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {layoutSuggestions.map((suggestion, idx) => (
+              <Card key={idx} className="hover:shadow-md transition-all">
+                <CardContent className="p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="font-medium">
+                        {suggestion.product1}
+                      </Badge>
+                      <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                      <Badge variant="secondary" className="font-medium">
+                        {suggestion.product2}
+                      </Badge>
+                    </div>
+                    <Badge className={cn('border', getLiftColor(suggestion.lift))}>
+                      {suggestion.lift.toFixed(1)}x
+                    </Badge>
+                  </div>
+
+                  <p className="text-sm text-foreground font-medium">
+                    {suggestion.recommendation}
+                  </p>
+
+                  <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
+                    <span>Confidence: {(suggestion.confidence * 100).toFixed(0)}%</span>
+                    <span>Lift: {suggestion.lift.toFixed(2)}x</span>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+
+            {layoutSuggestions.length === 0 && (
+              <div className="col-span-2 text-center py-12 text-muted-foreground">
+                <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>No layout suggestions for this region</p>
+                <p className="text-xs mt-1">Insufficient correlation data available</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+}
