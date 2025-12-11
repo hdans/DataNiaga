@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ForecastChart } from '@/components/dashboard/ForecastChart';
 import { IslandSelector } from '@/components/dashboard/IslandSelector';
-import { Island, PRODUCT_CATEGORIES } from '@/lib/mockData';
+import { useProducts, useIslands } from '@/hooks/useApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Info } from 'lucide-react';
 
 export default function Forecasts() {
-  const [selectedIsland, setSelectedIsland] = useState<Island>('JAWA, BALI, & NT');
+  const { data: islands = [] } = useIslands();
+  const { data: products = [] } = useProducts();
+
+  const [selectedIsland, setSelectedIsland] = useState<string>(islands[0] ?? 'JAWA, BALI, & NT');
 
   return (
     <DashboardLayout>
@@ -48,7 +51,7 @@ export default function Forecasts() {
 
         {/* Charts Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {PRODUCT_CATEGORIES.map((category) => (
+          {products.map((category) => (
             <ForecastChart
               key={category}
               island={selectedIsland}

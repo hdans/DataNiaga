@@ -1,5 +1,6 @@
+import React from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { forecastQuality } from '@/lib/mockData';
+import { useProducts, useIslands, useForecast } from '@/hooks/useApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -56,22 +57,26 @@ const CHART_COLORS = [
 ];
 
 export default function Quality() {
-  // Calculate summary stats
-  const qualityCounts = forecastQuality.reduce(
-    (acc, item) => {
-      acc[item.quality] = (acc[item.quality] || 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>
-  );
+  const { data: products = [] } = useProducts();
+  const { data: islands = [] } = useIslands();
+  const [selectedIsland, setSelectedIsland] = React.useState<string>(islands[0] ?? 'JAWA, BALI, & NT');
 
-  const pieData = Object.entries(qualityCounts).map(([name, value]) => ({
-    name,
-    value,
-  }));
+  const [metricsMap, setMetricsMap] = React.useState<Record<string, { mae: number; mape: number; quality: string }>>({});
 
-  const avgMape =
-    forecastQuality.reduce((sum, item) => sum + item.mape, 0) / forecastQuality.length;
+  const updateMetric = (product: string, data: { mae: number; mape: number; quality: string }) => {
+    setMetricsMap((prev) => ({ ...prev, [product]: data }));
+  };
+
+  const qualityCounts = Object.values(metricsMap).reduce((acc: Record<string, number>, item) => {
+    acc[item.quality] = (acc[item.quality] || 0) + 1;
+    return acc;
+  }, {});
+
+  const pieData = Object.entries(qualityCounts).map(([name, value]) => ({ name, value }));
+
+  const avgMape = Object.values(metricsMap).length
+    ? Object.values(metricsMap).reduce((sum, item) => sum + item.mape, 0) / Object.values(metricsMap).length
+    : 0;
 
   return (
     <DashboardLayout>
@@ -163,29 +168,33 @@ export default function Quality() {
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg bg-success/10 border border-success/30">
                   <p className="text-xs text-success font-medium">Best Performer</p>
-                  <p className="text-sm font-semibold text-foreground mt-1">
-                    {forecastQuality.reduce((best, curr) =>
-                      curr.mape < best.mape ? curr : best
-                    ).category}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    MAPE: {Math.min(...forecastQuality.map((f) => f.mape)).toFixed(1)}%
-                  </p>
+                    <p className="text-sm font-semibold text-foreground mt-1">
+                      {Object.values(metricsMap).length
+                        ? Object.entries(metricsMap).reduce((best, [prod, curr]: any) => {
+                            return curr.mape < best[1].mape ? [prod, curr] : best;
+                          }, ['', { mape: Infinity }])[0]
+                        : '-'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      MAPE: {Object.values(metricsMap).length ? Math.min(...Object.values(metricsMap).map((f) => f.mape)).toFixed(1) : '-'}%
+                    </p>
                 </div>
 
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30">
                   <p className="text-xs text-destructive font-medium">Needs Attention</p>
-                  <p className="text-sm font-semibold text-foreground mt-1">
-                    {forecastQuality.reduce((worst, curr) =>
-                      curr.mape > worst.mape ? curr : worst
-                    ).category}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    MAPE: {Math.max(...forecastQuality.map((f) => f.mape)).toFixed(1)}%
-                  </p>
+                    <p className="text-sm font-semibold text-foreground mt-1">
+                      {Object.values(metricsMap).length
+                        ? Object.entries(metricsMap).reduce((worst, [prod, curr]: any) => {
+                            return curr.mape > worst[1].mape ? [prod, curr] : worst;
+                          }, ['', { mape: -Infinity }])[0]
+                        : '-'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      MAPE: {Object.values(metricsMap).length ? Math.max(...Object.values(metricsMap).map((f) => f.mape)).toFixed(1) : '-'}%
+                    </p>
                 </div>
               </div>
             </CardContent>
@@ -209,40 +218,60 @@ export default function Quality() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {forecastQuality.map((item, idx) => {
-                  const config = qualityConfig[item.quality];
-                  const Icon = config.icon;
-
-                  return (
-                    <TableRow key={idx}>
-                      <TableCell>
-                        <Badge variant="outline">{item.category}</Badge>
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {item.pulau}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {item.mae.toFixed(1)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono text-sm">
-                        {item.mape.toFixed(1)}%
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center justify-center gap-1">
-                          <Icon className={cn('w-4 h-4', config.color)} />
-                          <span className={cn('text-xs font-medium', config.color)}>
-                            {item.quality}
-                          </span>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                {(products || []).slice(0, 24).map((product) => (
+                  <ProductQualityRow
+                    key={product}
+                    island={selectedIsland}
+                    product={product}
+                    onMetric={(m) => updateMetric(product, m)}
+                  />
+                ))}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
       </div>
     </DashboardLayout>
+  );
+}
+
+function mapMapeToQuality(mape: number) {
+  if (mape <= 10) return 'Excellent';
+  if (mape <= 20) return 'Good';
+  if (mape <= 30) return 'Fair';
+  return 'Poor';
+}
+
+function ProductQualityRow({ island, product, onMetric }: { island: string; product: string; onMetric: (m: { mae: number; mape: number; quality: string }) => void }) {
+  const { data: rows = [], isLoading } = useForecast(island, product) as any;
+
+  React.useEffect(() => {
+    if (!rows || rows.length === 0) return;
+    const historical = rows.filter((r: any) => !r.is_forecast && r.actual != null);
+    if (historical.length === 0) return onMetric({ mae: 0, mape: 0, quality: 'Poor' });
+
+    const errors = historical.map((h: any) => Math.abs(h.actual - h.predicted));
+    const maes = errors.reduce((a: number, b: number) => a + b, 0) / errors.length;
+    const mapes = historical
+      .map((h: any) => (h.actual > 0 ? Math.abs((h.actual - h.predicted) / h.actual) * 100 : 0));
+    const mape = mapes.reduce((a: number, b: number) => a + b, 0) / mapes.length;
+
+    onMetric({ mae: maes, mape, quality: mapMapeToQuality(mape) });
+  }, [rows]);
+
+  const config = { color: 'text-muted-foreground' } as any;
+
+  return (
+    <TableRow>
+      <TableCell>
+        <Badge variant="outline">{product}</Badge>
+      </TableCell>
+      <TableCell className="text-sm text-muted-foreground">{island}</TableCell>
+      <TableCell className="text-right font-mono text-sm">{isLoading ? '—' : '-'}</TableCell>
+      <TableCell className="text-right font-mono text-sm">{isLoading ? '—' : '-'}</TableCell>
+      <TableCell>
+        <div className="text-xs text-muted-foreground">{isLoading ? 'Loading…' : '-'}</div>
+      </TableCell>
+    </TableRow>
   );
 }

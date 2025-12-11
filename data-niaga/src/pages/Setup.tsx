@@ -18,6 +18,8 @@ import {
   X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useUploadData, useCreateUser } from '@/hooks/useApi';
+import { toast } from 'sonner';
 
 const REQUIRED_COLUMNS = ['InvoiceNo', 'InvoiceDate', 'PULAU', 'PRODUCT_CATEGORY', 'Quantity'];
 
@@ -27,7 +29,7 @@ interface UserInfo {
   company: string;
 }
 
-type ProcessingStep = 'idle' | 'validating' | 'forecasting' | 'mba' | 'complete';
+type ProcessingStep = 'idle' | 'uploading' | 'validating' | 'forecasting' | 'mba' | 'complete' | 'error';
 
 export default function Setup() {
   const navigate = useNavigate();
@@ -38,6 +40,9 @@ export default function Setup() {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [processingStep, setProcessingStep] = useState<ProcessingStep>('idle');
   const [progress, setProgress] = useState(0);
+  
+  const uploadMutation = useUploadData();
+  const createUserMutation = useCreateUser();
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -89,6 +94,55 @@ export default function Setup() {
     setValidationError(null);
   };
 
+  const processData = async () => {
+    if (!file) {
+      setValidationError('Please upload a file first');
+      return;
+    }
+
+    try {
+      // Step 1: Upload file
+      setProcessingStep('uploading');
+      setProgress(10);
+      
+      // Step 2: Validating
+      setProcessingStep('validating');
+      setProgress(20);
+      await new Promise(r => setTimeout(r, 300));
+      
+      // Step 3: Call API
+      setProcessingStep('forecasting');
+      setProgress(40);
+      
+      const result = await uploadMutation.mutateAsync(file);
+      
+      setProgress(70);
+      setProcessingStep('mba');
+      await new Promise(r => setTimeout(r, 500));
+      
+      // Step 4: Save user info
+      setProgress(90);
+      await createUserMutation.mutateAsync(userInfo);
+      
+      // Store user info in localStorage
+      localStorage.setItem('dataniaga_user', JSON.stringify(userInfo));
+      
+      setProgress(100);
+      setProcessingStep('complete');
+      toast.success(`Data processed: ${result.records} records`);
+      
+      await new Promise(r => setTimeout(r, 800));
+      navigate('/dashboard');
+      
+    } catch (error: any) {
+      setProcessingStep('error');
+      const message = error?.message || 'Failed to process data';
+      setValidationError(message);
+      toast.error(message);
+    }
+  };
+
+  // Fallback: Simulate processing when API is unavailable
   const simulateProcessing = async () => {
     setProcessingStep('validating');
     setProgress(10);
@@ -109,18 +163,24 @@ export default function Setup() {
     setProcessingStep('complete');
     await new Promise(r => setTimeout(r, 800));
 
-    // Store user info in localStorage
     localStorage.setItem('dataniaga_user', JSON.stringify(userInfo));
-    
+    toast.success('Data processed (demo mode)');
     navigate('/dashboard');
   };
 
-  const handleProcessData = () => {
+  const handleProcessData = async () => {
     if (!file) {
       setValidationError('Please upload a file first');
       return;
     }
-    simulateProcessing();
+    
+    // Try real API first, fallback to simulation
+    try {
+      await processData();
+    } catch {
+      // If API fails, use simulation mode
+      simulateProcessing();
+    }
   };
 
   const canProceedStep1 = userInfo.name.trim() && userInfo.role.trim() && userInfo.company.trim();
@@ -128,10 +188,12 @@ export default function Setup() {
 
   const getProcessingMessage = () => {
     switch (processingStep) {
+      case 'uploading': return 'Uploading file...';
       case 'validating': return 'Validating data columns...';
       case 'forecasting': return 'Training Forecast Model (LightGBM)...';
       case 'mba': return 'Analyzing Market Basket (FP-Growth)...';
       case 'complete': return 'Analysis Complete!';
+      case 'error': return 'Processing Failed';
       default: return '';
     }
   };

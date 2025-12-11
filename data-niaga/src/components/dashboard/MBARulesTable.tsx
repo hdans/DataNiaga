@@ -1,4 +1,4 @@
-import { mbaRules, Island } from '@/lib/mockData';
+// dynamic island strings are used from API
 import {
   Table,
   TableBody,
@@ -11,16 +11,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMBARules } from '@/hooks/useApi';
 
 interface MBARulesTableProps {
-  island?: Island;
+  island?: string;
   limit?: number;
 }
 
 export function MBARulesTable({ island, limit = 10 }: MBARulesTableProps) {
-  const filteredRules = island
-    ? mbaRules.filter((r) => r.pulau === island).slice(0, limit)
-    : mbaRules.slice(0, limit);
+  const { data: rules, isLoading, isError } = useMBARules(island as any);
+
+  const filteredRules = (rules || []).slice(0, limit);
 
   const getLiftColor = (lift: number) => {
     if (lift >= 3.5) return 'text-success font-semibold';
@@ -47,29 +48,61 @@ export function MBARulesTable({ island, limit = 10 }: MBARulesTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredRules.map((rule) => (
-              <TableRow key={rule.id}>
-                <TableCell>
-                  <Badge variant="secondary" className="text-xs">
-                    {rule.antecedent}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <ArrowRight className="w-4 h-4 text-muted-foreground" />
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="text-xs">
-                    {rule.consequent}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right text-xs">
-                  {(rule.confidence * 100).toFixed(0)}%
-                </TableCell>
-                <TableCell className={cn('text-right text-xs', getLiftColor(rule.lift))}>
-                  {rule.lift.toFixed(2)}x
+            {isLoading ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-xs py-4">
+                  Loading rules...
                 </TableCell>
               </TableRow>
-            ))}
+            ) : isError ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-xs py-4">
+                  Failed to load MBA rules
+                </TableCell>
+              </TableRow>
+            ) : filteredRules.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-xs py-4">
+                  No rules available
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredRules.map((rule: any, idx: number) => {
+                const antecedent = Array.isArray(rule.antecedents)
+                  ? rule.antecedents.join(', ')
+                  : rule.antecedents ?? rule.antecedent ?? '';
+                const consequent = Array.isArray(rule.consequents)
+                  ? rule.consequents.join(', ')
+                  : rule.consequents ?? rule.consequent ?? '';
+
+                const confidence = typeof rule.confidence === 'number' ? rule.confidence : 0;
+                const lift = typeof rule.lift === 'number' ? rule.lift : 0;
+
+                return (
+                  <TableRow key={rule.id ?? idx}>
+                    <TableCell>
+                      <Badge variant="secondary" className="text-xs">
+                        {antecedent}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {consequent}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right text-xs">
+                      {(confidence * 100).toFixed(0)}%
+                    </TableCell>
+                    <TableCell className={cn('text-right text-xs', getLiftColor(lift))}>
+                      {lift.toFixed(2)}x
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
           </TableBody>
         </Table>
       </CardContent>

@@ -19,7 +19,7 @@ interface DashboardLayoutProps {
 }
 
 const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: TrendingUp, label: 'Forecasts', path: '/forecasts' },
   { icon: Package, label: 'Smart Inventory', path: '/inventory' },
   { icon: Gift, label: 'Promo Planner', path: '/promo' },
@@ -46,7 +46,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
                 <BarChart3 className="w-5 h-5 text-primary-foreground" />
               </div>
-              <span className="font-bold text-lg text-foreground">RetailDSS</span>
+              <span className="font-bold text-lg text-foreground">DataNiaga</span>
             </div>
           )}
           <Button

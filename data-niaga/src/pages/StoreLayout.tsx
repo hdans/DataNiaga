@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { IslandSelector } from '@/components/dashboard/IslandSelector';
-import { Island, mbaRules, ProductCategory } from '@/lib/mockData';
+import { ProductCategory } from '@/lib/mockData';
+import { useProducts, useMBARules } from '@/hooks/useApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, ArrowRight, Sparkles, LayoutGrid } from 'lucide-react';
@@ -16,26 +17,29 @@ interface LayoutSuggestion {
 }
 
 export default function StoreLayout() {
-  const [selectedIsland, setSelectedIsland] = useState<Island>('JAWA, BALI, & NT');
+  const { data: products = [] } = useProducts();
+  const [selectedIsland, setSelectedIsland] = useState<string>('JAWA, BALI, & NT');
+  const { data: mbaRules = [] } = useMBARules(selectedIsland);
 
   const layoutSuggestions = useMemo(() => {
-    const suggestions: LayoutSuggestion[] = mbaRules
-      .filter((r) => r.pulau === selectedIsland && r.lift >= 2.0)
-      .map((rule) => ({
-        product1: rule.antecedent,
-        product2: rule.consequent,
-        lift: rule.lift,
-        confidence: rule.confidence,
-        recommendation: rule.lift >= 3.5
-          ? 'Place adjacent - Very strong correlation'
-          : rule.lift >= 2.5
-          ? 'Place nearby - Strong correlation'
-          : 'Consider proximity - Moderate correlation',
+    const suggestions: LayoutSuggestion[] = (mbaRules || [])
+      .filter((r: any) => (r.lift || 0) >= 2.0)
+      .map((rule: any) => ({
+        product1: Array.isArray(rule.antecedents) ? rule.antecedents[0] : rule.antecedents || '',
+        product2: Array.isArray(rule.consequents) ? rule.consequents[0] : rule.consequents || '',
+        lift: rule.lift || 0,
+        confidence: rule.confidence || 0,
+        recommendation:
+          (rule.lift || 0) >= 3.5
+            ? 'Place adjacent - Very strong correlation'
+            : (rule.lift || 0) >= 2.5
+            ? 'Place nearby - Strong correlation'
+            : 'Consider proximity - Moderate correlation',
       }))
       .sort((a, b) => b.lift - a.lift);
 
     return suggestions;
-  }, [selectedIsland]);
+  }, [selectedIsland, mbaRules]);
 
   // Create a simple store layout visualization
   const layoutGrid = useMemo(() => {

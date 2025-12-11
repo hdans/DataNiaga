@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { ForecastChart } from '@/components/dashboard/ForecastChart';
@@ -6,8 +6,9 @@ import { RecommendationCard } from '@/components/dashboard/RecommendationCard';
 import { IslandSelector } from '@/components/dashboard/IslandSelector';
 import { AlertBanner } from '@/components/dashboard/AlertBanner';
 import { MBARulesTable } from '@/components/dashboard/MBARulesTable';
-import { getDashboardMetrics, recommendations, Island, PRODUCT_CATEGORIES } from '@/lib/mockData';
-import { TrendingUp, AlertTriangle, Package, Gift, Target } from 'lucide-react';
+import { getDashboardMetrics, recommendations as mockRecommendations } from '@/lib/mockData';
+import { TrendingUp, AlertTriangle, Package, Gift, Target, Loader2 } from 'lucide-react';
+import { useDashboardSummary, useRecommendations, useIslands, useProducts } from '@/hooks/useApi';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -19,23 +20,61 @@ const formatCurrency = (value: number) => {
 };
 
 export default function Dashboard() {
-  const [selectedIsland, setSelectedIsland] = useState<Island>('JAWA, BALI, & NT');
+  const { data: islands = [] } = useIslands();
+  const [selectedIsland, setSelectedIsland] = useState<string>(islands[0] ?? 'JAWA, BALI, & NT');
+  const { data: products = [] } = useProducts(selectedIsland);
   const [userName, setUserName] = useState<string>('');
-  const metrics = getDashboardMetrics();
+  
+  // API Hooks with fallback to mock data
+  const { data: apiSummary, isLoading: summaryLoading } = useDashboardSummary();
+  const { data: apiRecommendations } = useRecommendations(selectedIsland);
+  
+  // Use API data or fallback to mock
+  const metrics = useMemo(() => {
+    if (apiSummary) {
+      return {
+        totalForecastRevenue: apiSummary.total_products * 15000000,
+        stockoutRisks: apiSummary.stockout_risks,
+        bundlingOpportunities: apiSummary.opportunities,
+        promoSuggestions: Math.floor(apiSummary.opportunities * 0.6),
+        accuracyScore: apiSummary.forecast_accuracy,
+      };
+    }
+    return getDashboardMetrics();
+  }, [apiSummary]);
 
   useEffect(() => {
     const stored = localStorage.getItem('dataniaga_user');
     if (stored) {
-      const user = JSON.parse(stored);
-      setUserName(user.name);
+      try {
+        const user = JSON.parse(stored);
+        setUserName(user?.name || '');
+      } catch (err) {
+        // Corrupted localStorage entry — remove it to avoid repeated errors
+        console.warn('Failed to parse dataniaga_user from localStorage, clearing value.', err);
+        localStorage.removeItem('dataniaga_user');
+        setUserName('');
+      }
     }
   }, []);
 
-  const filteredRecommendations = recommendations.filter(
-    (r) => r.pulau === selectedIsland
-  );
+  // Use API recommendations or fallback to mock
+  const filteredRecommendations = useMemo(() => {
+    if (apiRecommendations && apiRecommendations.length > 0) {
+      return apiRecommendations.map((r, idx) => ({
+        id: `api-${idx}`,
+        pulau: selectedIsland,
+        type: r.type as 'derived_demand' | 'dead_stock',
+        product: r.product,
+        relatedProduct: r.related_product,
+        action: r.action,
+        priority: r.priority as 'high' | 'medium' | 'low',
+      }));
+    }
+    return mockRecommendations.filter((r) => r.pulau === selectedIsland);
+  }, [apiRecommendations, selectedIsland]);
 
-  const topCategories = PRODUCT_CATEGORIES.slice(0, 4);
+  const topCategories = products.slice(0, 4);
 
   return (
     <DashboardLayout>

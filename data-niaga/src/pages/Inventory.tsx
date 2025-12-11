@@ -1,13 +1,8 @@
 import { useState, useMemo } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { IslandSelector } from '@/components/dashboard/IslandSelector';
-import {
-  Island,
-  PRODUCT_CATEGORIES,
-  ProductCategory,
-  generateForecastData,
-  mbaRules,
-} from '@/lib/mockData';
+import { ProductCategory } from '@/lib/mockData';
+import { useProducts, useForecast, useMBARules } from '@/hooks/useApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
@@ -30,40 +25,41 @@ interface InventoryItem {
   derivedDemand: ProductCategory[];
 }
 
+// Reusable trend icon component at module scope
+function TrendIcon({ trend }: { trend: 'up' | 'down' | 'stable' }) {
+  if (trend === 'up') return <TrendingUp className="w-4 h-4 text-success" />;
+  if (trend === 'down') return <TrendingDown className="w-4 h-4 text-destructive" />;
+  return <Minus className="w-4 h-4 text-muted-foreground" />;
+}
+
 export default function Inventory() {
-  const [selectedIsland, setSelectedIsland] = useState<Island>('JAWA, BALI, & NT');
+  const { data: products = [] } = useProducts();
+  const [selectedIsland, setSelectedIsland] = useState<string>('JAWA, BALI, & NT');
+  const { data: mbaRules = [] } = useMBARules(selectedIsland);
+
+  // Only show top N products to avoid making too many queries at once
+  const topProducts = (products || []).slice(0, 24);
 
   const inventoryData = useMemo(() => {
-    return PRODUCT_CATEGORIES.map((category): InventoryItem => {
-      const forecast = generateForecastData(selectedIsland, category);
-      const currentWeek = forecast[0]?.quantity || 0;
-      const nextWeek = forecast[1]?.quantity || 0;
-      const trendPercent = currentWeek > 0 ? ((nextWeek - currentWeek) / currentWeek) * 100 : 0;
-
-      // Find derived demand from MBA rules
-      const derivedProducts = mbaRules
-        .filter((r) => r.pulau === selectedIsland && r.antecedent === category)
-        .map((r) => r.consequent);
-
+    return topProducts.map((category): InventoryItem => {
+      // We'll fetch forecasts per-row in the UI component to avoid blocking this map
       return {
-        category,
-        currentWeekForecast: currentWeek,
-        nextWeekForecast: nextWeek,
-        trend: trendPercent > 5 ? 'up' : trendPercent < -5 ? 'down' : 'stable',
-        trendPercent: Math.abs(trendPercent),
-        derivedDemand: derivedProducts,
+        category: category as ProductCategory,
+        currentWeekForecast: 0,
+        nextWeekForecast: 0,
+        trend: 'stable',
+        trendPercent: 0,
+        derivedDemand: (mbaRules || [])
+          .filter((r: any) => (Array.isArray(r.consequents) ? r.consequents.includes(category) : r.consequents === category))
+          .map((r: any) => (Array.isArray(r.antecedents) ? r.antecedents[0] : r.antecedent || ''))
+          .filter(Boolean),
       };
-    }).sort((a, b) => b.trendPercent - a.trendPercent);
-  }, [selectedIsland]);
+    });
+  }, [topProducts, mbaRules]);
 
   const spikingItems = inventoryData.filter((item) => item.trend === 'up');
   const decliningItems = inventoryData.filter((item) => item.trend === 'down');
 
-  const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
-    if (trend === 'up') return <TrendingUp className="w-4 h-4 text-success" />;
-    if (trend === 'down') return <TrendingDown className="w-4 h-4 text-destructive" />;
-    return <Minus className="w-4 h-4 text-muted-foreground" />;
-  };
 
   return (
     <DashboardLayout>
@@ -129,48 +125,11 @@ export default function Inventory() {
               </TableHeader>
               <TableBody>
                 {inventoryData.map((item) => (
-                  <TableRow key={item.category}>
-                    <TableCell>
-                      <Badge variant="outline" className="font-medium">
-                        {item.category}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {item.currentWeekForecast.toLocaleString()}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {item.nextWeekForecast.toLocaleString()}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center gap-1">
-                        <TrendIcon trend={item.trend} />
-                        <span
-                          className={cn(
-                            'text-xs font-medium',
-                            item.trend === 'up' && 'text-success',
-                            item.trend === 'down' && 'text-destructive',
-                            item.trend === 'stable' && 'text-muted-foreground'
-                          )}
-                        >
-                          {item.trendPercent.toFixed(1)}%
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {item.derivedDemand.length > 0 ? (
-                        <div className="flex items-center gap-1 flex-wrap">
-                          <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                          {item.derivedDemand.map((d) => (
-                            <Badge key={d} variant="secondary" className="text-[10px]">
-                              {d}
-                            </Badge>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
+                  <ProductInventoryRow
+                    key={item.category}
+                    island={selectedIsland}
+                    item={item}
+                  />
                 ))}
               </TableBody>
             </Table>
@@ -178,5 +137,64 @@ export default function Inventory() {
         </Card>
       </div>
     </DashboardLayout>
+  );
+}
+
+// Separate row component to fetch per-product forecast data
+function ProductInventoryRow({ island, item }: { island: string; item: InventoryItem }) {
+  const { data: forecast = [], isLoading } = useForecast(island, item.category as string) as any;
+
+  const current = forecast.slice(-1)[0];
+  const next = forecast.find((f: any) => f.is_forecast) || null;
+
+  const currentVal = current ? Math.round(current.predicted) : 0;
+  const nextVal = next ? Math.round(next.predicted) : 0;
+
+  const trendPercent = currentVal > 0 ? Math.abs(((nextVal - currentVal) / (currentVal || 1)) * 100) : 0;
+  const trend: 'up' | 'down' | 'stable' = nextVal - currentVal > 5 ? 'up' : nextVal - currentVal < -5 ? 'down' : 'stable';
+
+  return (
+    <TableRow key={item.category}>
+      <TableCell>
+        <Badge variant="outline" className="font-medium">
+          {item.category}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right font-mono">
+        {isLoading ? '—' : currentVal.toLocaleString()}
+      </TableCell>
+      <TableCell className="text-right font-mono">
+        {isLoading ? '—' : nextVal.toLocaleString()}
+      </TableCell>
+      <TableCell>
+        <div className="flex items-center justify-center gap-1">
+          <TrendIcon trend={trend} />
+          <span
+            className={cn(
+              'text-xs font-medium',
+              trend === 'up' && 'text-success',
+              trend === 'down' && 'text-destructive',
+              trend === 'stable' && 'text-muted-foreground'
+            )}
+          >
+            {trendPercent.toFixed(1)}%
+          </span>
+        </div>
+      </TableCell>
+      <TableCell>
+        {item.derivedDemand.length > 0 ? (
+          <div className="flex items-center gap-1 flex-wrap">
+            <ArrowRight className="w-3 h-3 text-muted-foreground" />
+            {item.derivedDemand.map((d) => (
+              <Badge key={d} variant="secondary" className="text-[10px]">
+                {d}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground">-</span>
+        )}
+      </TableCell>
+    </TableRow>
   );
 }

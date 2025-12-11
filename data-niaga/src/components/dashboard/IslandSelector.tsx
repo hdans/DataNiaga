@@ -1,22 +1,24 @@
-import { ISLANDS, Island } from '@/lib/mockData';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MapPin } from 'lucide-react';
+import { useIslands } from '@/hooks/useApi';
 
 interface IslandSelectorProps {
-  selected: Island;
-  onChange: (island: Island) => void;
+  selected: string;
+  onChange: (island: string) => void;
   className?: string;
 }
 
 export function IslandSelector({ selected, onChange, className }: IslandSelectorProps) {
+  const { data: islands = [] } = useIslands();
+
   return (
     <div className={cn('flex items-center gap-2 flex-wrap', className)}>
       <div className="flex items-center gap-1.5 text-sm text-muted-foreground mr-2">
         <MapPin className="w-4 h-4" />
         <span className="font-medium">Region:</span>
       </div>
-      {ISLANDS.map((island) => (
+      {islands.map((island) => (
         <Button
           key={island}
           variant={selected === island ? 'default' : 'outline'}

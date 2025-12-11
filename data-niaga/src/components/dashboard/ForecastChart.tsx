@@ -1,132 +1,66 @@
-import { useMemo } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  ReferenceLine,
-} from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { generateHistoricalData, generateForecastData, Island, ProductCategory } from '@/lib/mockData';
+import React from 'react';
+import { useForecast } from '@/hooks/useApi';
 
 interface ForecastChartProps {
-  island: Island;
-  category: ProductCategory;
+  island: string;
+  category: string;
   showLast?: number;
 }
 
-export function ForecastChart({ island, category, showLast = 12 }: ForecastChartProps) {
-  const chartData = useMemo(() => {
-    const historical = generateHistoricalData(island, category).slice(-showLast);
-    const forecast = generateForecastData(island, category);
-    
-    // Mark the transition point
-    const lastHistorical = historical[historical.length - 1];
-    
-    return {
-      data: [
-        ...historical.map(d => ({
-          date: d.date,
-          actual: d.quantity,
-          forecast: null as number | null,
-        })),
-        // Bridge point
-        {
-          date: lastHistorical.date,
-          actual: lastHistorical.quantity,
-          forecast: lastHistorical.quantity,
-        },
-        ...forecast.map(d => ({
-          date: d.date,
-          actual: null as number | null,
-          forecast: d.quantity,
-        })),
-      ],
-      cutoffDate: lastHistorical.date,
-    };
-  }, [island, category, showLast]);
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+// Lightweight sparkline renderer to avoid adding heavy runtime deps
+function Sparkline({ values }: { values: number[] }) {
+  const width = 240;
+  const height = 64;
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const points = values
+    .map((v, i) => {
+      const x = (i / (values.length - 1 || 1)) * width;
+      const y = height - ((v - min) / (max - min || 1)) * height;
+      return `${x},${y}`;
+    })
+    .join(' ');
 
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base font-semibold flex items-center justify-between">
-          <span>{category}</span>
-          <span className="text-xs font-normal text-muted-foreground">{island}</span>
-        </CardTitle>
+    <svg width={width} height={height} className="w-full h-16">
+      <polyline
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        points={points}
+        className="text-primary/80"
+      />
+    </svg>
+  );
+}
+
+export function ForecastChart({ island, category, showLast = 8 }: ForecastChartProps) {
+  const { data, isLoading, isError } = useForecast(island, category);
+
+  const values = (data || []).slice(-showLast).map((d) => Math.round(d.predicted));
+
+  return (
+    <Card className="h-40">
+      <CardHeader>
+        <CardTitle className="text-sm">{category}</CardTitle>
       </CardHeader>
-      <CardContent className="pb-4">
-        <div className="h-[280px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={chartData.data}
-              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis
-                dataKey="date"
-                tickFormatter={formatDate}
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={11}
-                tickLine={false}
-              />
-              <YAxis
-                stroke="hsl(var(--muted-foreground))"
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'hsl(var(--card))',
-                  border: '1px solid hsl(var(--border))',
-                  borderRadius: '8px',
-                  fontSize: '12px',
-                }}
-                labelFormatter={formatDate}
-              />
-              <Legend
-                wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }}
-              />
-              <ReferenceLine
-                x={chartData.cutoffDate}
-                stroke="hsl(var(--primary))"
-                strokeDasharray="5 5"
-                strokeWidth={2}
-              />
-              <Line
-                type="monotone"
-                dataKey="actual"
-                stroke="hsl(var(--chart-4))"
-                strokeWidth={2}
-                dot={{ r: 3, fill: 'hsl(var(--chart-4))' }}
-                activeDot={{ r: 5 }}
-                name="Actual"
-                connectNulls={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="forecast"
-                stroke="hsl(var(--primary))"
-                strokeWidth={2}
-                strokeDasharray="5 5"
-                dot={{ r: 3, fill: 'hsl(var(--primary))' }}
-                activeDot={{ r: 5 }}
-                name="Forecast"
-                connectNulls={false}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+      <CardContent className="p-2">
+        <div className="text-xs text-muted-foreground mb-2">{island}</div>
+        <div className="w-full">
+          {isLoading ? (
+            <div className="h-16 flex items-center justify-center text-sm text-muted-foreground">Loading...</div>
+          ) : isError ? (
+            <div className="h-16 flex items-center justify-center text-sm text-destructive">Error loading forecast</div>
+          ) : values.length ? (
+            <Sparkline values={values} />
+          ) : (
+            <div className="h-16 flex items-center justify-center text-sm text-muted-foreground">No forecast data</div>
+          )}
         </div>
       </CardContent>
     </Card>
   );
 }
+
+export default ForecastChart;
