@@ -8,7 +8,8 @@ import { AlertBanner } from '@/components/dashboard/AlertBanner';
 import { MBARulesTable } from '@/components/dashboard/MBARulesTable';
 import { getDashboardMetrics, recommendations as mockRecommendations } from '@/lib/mockData';
 import { TrendingUp, AlertTriangle, Package, Gift, Target, Loader2 } from 'lucide-react';
-import { useDashboardSummary, useRecommendations, useIslands, useProducts } from '@/hooks/useApi';
+import { useDashboardSummary, useRecommendations, useIslands, useProducts, useMBARules } from '@/hooks/useApi';
+import api from '@/lib/api';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('id-ID', {
@@ -28,20 +29,40 @@ export default function Dashboard() {
   // API Hooks with fallback to mock data
   const { data: apiSummary, isLoading: summaryLoading } = useDashboardSummary();
   const { data: apiRecommendations } = useRecommendations(selectedIsland);
+  const { data: mbaRules = [] } = useMBARules(selectedIsland);
+
+  // Computed region-aware metrics (client-side, limited)
+  const [computedLoading, setComputedLoading] = useState(false);
+  const [computedMetrics, setComputedMetrics] = useState({
+    stockoutRisks: 0,
+    bundlingOpportunities: 0,
+    promoSuggestions: 0,
+    modelAccuracy: apiSummary?.forecast_accuracy ?? 0,
+  });
   
   // Use API data or fallback to mock
   const metrics = useMemo(() => {
     if (apiSummary) {
       return {
-        totalForecastRevenue: apiSummary.total_products * 15000000,
+        totalProducts: apiSummary.total_products,
+        totalIslands: apiSummary.total_islands,
         stockoutRisks: apiSummary.stockout_risks,
         bundlingOpportunities: apiSummary.opportunities,
         promoSuggestions: Math.floor(apiSummary.opportunities * 0.6),
         accuracyScore: apiSummary.forecast_accuracy,
-      };
+      } as const;
     }
-    return getDashboardMetrics();
-  }, [apiSummary]);
+
+    const fallback = getDashboardMetrics();
+    return {
+      totalProducts: (products && products.length > 0) ? products.length : (fallback.totalForecastRevenue ?? 0),
+      totalIslands: (islands && islands.length > 0) ? islands.length : 1,
+      stockoutRisks: fallback.stockoutRisks,
+      bundlingOpportunities: fallback.bundlingOpportunities,
+      promoSuggestions: fallback.promoSuggestions,
+      accuracyScore: Number(fallback.accuracyScore) || 0,
+    } as const;
+  }, [apiSummary, products, islands]);
 
   useEffect(() => {
     const stored = localStorage.getItem('dataniaga_user');
@@ -76,6 +97,92 @@ export default function Dashboard() {
 
   const topCategories = products.slice(0, 4);
 
+  // Compute client-side metrics: limited to top N products to avoid too many requests
+  useEffect(() => {
+    let mounted = true;
+    const N = 24;
+
+    async function computeMetrics() {
+      if (!selectedIsland || (products || []).length === 0) {
+        return;
+      }
+      setComputedLoading(true);
+
+      try {
+        const list = (products || []).slice(0, N);
+        // fetch forecasts in parallel
+        const promises = list.map((p) => api.getForecast(selectedIsland, p).catch(() => []));
+        const results = await Promise.all(promises);
+
+        // stockout: next < current
+        let stockout = 0;
+        const perProductMAPEs: number[] = [];
+
+        for (let i = 0; i < list.length; i++) {
+          const rows = results[i] || [];
+          if (!rows.length) continue;
+
+          const current = rows.slice(-2)[0] ?? rows[rows.length - 1];
+          const next = rows[rows.length - 1];
+          const currentVal = current ? (current.predicted ?? current.actual ?? 0) : 0;
+          const nextVal = next ? (next.predicted ?? next.actual ?? 0) : 0;
+          if (nextVal < currentVal) stockout += 1;
+
+          // compute MAPE for product if actuals exist
+          const pairs = rows.filter((r: any) => r.actual != null && r.predicted != null);
+          if (pairs.length) {
+            const mape = pairs.reduce((acc: number, r: any) => acc + Math.abs((r.actual - r.predicted) / Math.max(1, r.actual)), 0) / pairs.length * 100;
+            if (!Number.isNaN(mape) && Number.isFinite(mape)) perProductMAPEs.push(mape);
+          }
+        }
+
+        // bundling opportunities: count mba rules in region with lift >= 1.5
+        const bundling = (mbaRules || []).filter((r: any) => (r.lift ?? 0) >= 1.5).length;
+
+        // promo suggestions: prefer API recommendations if available otherwise derive from declines matched with mba rules
+        let promoCount = 0;
+        if (apiRecommendations && apiRecommendations.length > 0) {
+          promoCount = apiRecommendations.length;
+        } else {
+          // derive: count of products where decline AND there exists an mba rule with the product as consequent
+          const derived = new Set<string>();
+          for (let i = 0; i < list.length; i++) {
+            const product = list[i];
+            const rows = results[i] || [];
+            if (!rows.length) continue;
+            const current = rows.slice(-2)[0] ?? rows[rows.length - 1];
+            const next = rows[rows.length - 1];
+            const currentVal = current ? (current.predicted ?? current.actual ?? 0) : 0;
+            const nextVal = next ? (next.predicted ?? next.actual ?? 0) : 0;
+            if (nextVal < currentVal) {
+              const rule = (mbaRules || []).find((r: any) => {
+                const consequents = Array.isArray(r.consequents) ? r.consequents : [r.consequents];
+                return consequents.includes(product);
+              });
+              if (rule) derived.add(product);
+            }
+          }
+          promoCount = derived.size;
+        }
+
+        const modelAcc = apiSummary?.forecast_accuracy ?? (perProductMAPEs.length ? Math.round(perProductMAPEs.reduce((a, b) => a + b, 0) / perProductMAPEs.length) : 0);
+
+        if (mounted) {
+          setComputedMetrics({ stockoutRisks: stockout, bundlingOpportunities: bundling, promoSuggestions: promoCount, modelAccuracy: modelAcc });
+        }
+      } catch (err) {
+        console.warn('Failed computing metrics', err);
+      } finally {
+        if (mounted) setComputedLoading(false);
+      }
+    }
+
+    computeMetrics();
+    return () => {
+      mounted = false;
+    };
+  }, [selectedIsland, products, mbaRules, apiRecommendations, apiSummary]);
+
   return (
     <DashboardLayout>
       <div className="p-6 space-y-6">
@@ -93,46 +200,49 @@ export default function Dashboard() {
         </div>
 
         {/* Alert Banner */}
-        <AlertBanner />
+        <AlertBanner island={selectedIsland} />
 
         {/* Metrics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <MetricCard
-            title="Forecast Revenue"
-            value={formatCurrency(metrics.totalForecastRevenue)}
-            subtitle="Next 10 weeks"
-            icon={<TrendingUp className="w-5 h-5" />}
-            trend={{ value: 12.5, isPositive: true }}
-            variant="primary"
-          />
+            <MetricCard
+              title="Total Products"
+              value={summaryLoading ? '...' : String(metrics.totalProducts)}
+              subtitle="SKUs tracked"
+              icon={<Loader2 className="w-5 h-5" />}
+              variant="primary"
+            />
           <MetricCard
             title="Stockout Risks"
-            value={metrics.stockoutRisks}
+            value={summaryLoading || computedLoading ? '...' : computedMetrics.stockoutRisks}
             subtitle="Items at risk"
             icon={<AlertTriangle className="w-5 h-5" />}
             variant="danger"
           />
           <MetricCard
             title="Bundle Opportunities"
-            value={metrics.bundlingOpportunities}
+            value={summaryLoading || computedLoading ? '...' : computedMetrics.bundlingOpportunities}
             subtitle="High-lift pairs"
             icon={<Package className="w-5 h-5" />}
             variant="success"
           />
           <MetricCard
             title="Promo Suggestions"
-            value={metrics.promoSuggestions}
+            value={summaryLoading || computedLoading ? '...' : computedMetrics.promoSuggestions}
             subtitle="Dead stock items"
             icon={<Gift className="w-5 h-5" />}
             variant="warning"
           />
           <MetricCard
             title="Model Accuracy"
-            value={`${metrics.accuracyScore}%`}
+            value={summaryLoading || computedLoading ? '...' : `${computedMetrics.modelAccuracy}%`}
             subtitle="Avg. MAPE score"
             icon={<Target className="w-5 h-5" />}
             variant="default"
           />
+        </div>
+
+        <div className="text-xs text-muted-foreground mt-2">
+          Data source: {apiSummary ? 'Live API' : 'Mock data / no API response'}
         </div>
 
         {/* Charts Row */}

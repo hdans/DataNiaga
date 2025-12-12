@@ -190,7 +190,7 @@ export default function Setup() {
     switch (processingStep) {
       case 'uploading': return 'Uploading file...';
       case 'validating': return 'Validating data columns...';
-      case 'forecasting': return 'Training Forecast Model (LightGBM)...';
+      case 'forecasting': return 'Training Model...';
       case 'mba': return 'Analyzing Market Basket (FP-Growth)...';
       case 'complete': return 'Analysis Complete!';
       case 'error': return 'Processing Failed';

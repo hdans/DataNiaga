@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { IslandSelector } from '@/components/dashboard/IslandSelector';
 import { ProductCategory } from '@/lib/mockData';
-import { useProducts, useMBARules, useForecast } from '@/hooks/useApi';
+import { useProducts, useMBARules } from '@/hooks/useApi';
+import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,31 +25,62 @@ export default function Promo() {
 
   const { data: mbaRules = [] } = useMBARules(selectedIsland);
 
-  const promoSuggestions = useMemo(() => {
-    const suggestions: PromoSuggestion[] = [];
+  const [promoSuggestions, setPromoSuggestions] = useState<PromoSuggestion[]>([]);
 
-    // For each product, compute avg forecast and see if there is an MBA rule suggesting bundling
-    (products || []).slice(0, 24).forEach((category) => {
-      // compute average predicted for product by fetching forecasts synchronously is not possible here
-      // Instead, we'll create suggestions from MBA rules where consequent == category and lift > 2
-      const rule = (mbaRules || []).find((r: any) => {
-        const consequents = Array.isArray(r.consequents) ? r.consequents : [r.consequents];
-        return consequents.includes(category) && (r.lift || 0) > 2;
-      });
+  // Build suggestions from declining products (based on per-product forecast trend) + MBA rules
+  useEffect(() => {
+    let mounted = true;
 
-      if (rule) {
-        suggestions.push({
-          slowProduct: category as ProductCategory,
-          forecastQty: 0,
-          anchorProduct: Array.isArray(rule.antecedents) ? rule.antecedents[0] : rule.antecedents || '',
-          lift: rule.lift || 0,
-          suggestedDiscount: Math.min(30, Math.round((1 - 0.5) * 30 + 10)),
-          reason: `Bundle with ${Array.isArray(rule.antecedents) ? rule.antecedents[0] : rule.antecedents} (${(rule.lift||0).toFixed(1)}x correlation)`,
-        });
+    async function buildSuggestions() {
+      const suggestions: PromoSuggestion[] = [];
+      const list = (products || []).slice(0, 24);
+
+      // fetch forecasts in parallel
+      const promises = list.map((p) => api.getForecast(selectedIsland, p).catch(() => []));
+      const results = await Promise.all(promises);
+
+      for (let i = 0; i < list.length; i++) {
+        const product = list[i];
+        const rows = results[i] || [];
+        if (!rows.length) continue;
+
+        const current = rows.slice(-1)[0];
+        const next = rows.find((r: any) => r.is_forecast) || rows[rows.length - 1];
+
+        const currentVal = current ? Math.round(current.predicted || 0) : 0;
+        const nextVal = next ? Math.round(next.predicted || 0) : 0;
+
+        const changePct = currentVal > 0 ? ((nextVal - currentVal) / currentVal) * 100 : 0;
+
+        // consider declining if forecast drops by more than 5%
+        if (changePct < -5) {
+          // find MBA rule where this product is consequent
+          const rule = (mbaRules || []).find((r: any) => {
+            const consequents = Array.isArray(r.consequents) ? r.consequents : [r.consequents];
+            return consequents.includes(product) && (r.lift || 0) > 2;
+          });
+
+          if (rule) {
+            suggestions.push({
+              slowProduct: product as ProductCategory,
+              forecastQty: nextVal,
+              anchorProduct: Array.isArray(rule.antecedents) ? rule.antecedents[0] : rule.antecedents || '',
+              lift: rule.lift || 0,
+              suggestedDiscount: Math.min(30, Math.round((1 - Math.min(1, Math.max(0, nextVal / Math.max(1, currentVal)))) * 30 + 10)),
+              reason: `Bundle with ${Array.isArray(rule.antecedents) ? rule.antecedents[0] : rule.antecedents} — predicted drop ${Math.abs(changePct).toFixed(0)}%`,
+            });
+          }
+        }
       }
-    });
 
-    return suggestions.sort((a, b) => b.lift - a.lift);
+      if (mounted) setPromoSuggestions(suggestions.sort((a, b) => b.lift - a.lift));
+    }
+
+    buildSuggestions();
+
+    return () => {
+      mounted = false;
+    };
   }, [selectedIsland, products, mbaRules]);
 
   // Find weeks with predicted sales drop

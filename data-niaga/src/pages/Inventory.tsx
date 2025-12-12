@@ -37,6 +37,13 @@ export default function Inventory() {
   const [selectedIsland, setSelectedIsland] = useState<string>('JAWA, BALI, & NT');
   const { data: mbaRules = [] } = useMBARules(selectedIsland);
 
+  const [productMetrics, setProductMetrics] = useState<Record<string, {
+    current: number;
+    next: number;
+    trend: 'up' | 'down' | 'stable';
+    trendPercent: number;
+  }>>({});
+
   // Only show top N products to avoid making too many queries at once
   const topProducts = (products || []).slice(0, 24);
 
@@ -57,8 +64,12 @@ export default function Inventory() {
     });
   }, [topProducts, mbaRules]);
 
-  const spikingItems = inventoryData.filter((item) => item.trend === 'up');
-  const decliningItems = inventoryData.filter((item) => item.trend === 'down');
+  const spikingItems = Object.entries(productMetrics)
+    .filter(([, m]) => m.trend === 'up')
+    .map(([p]) => p);
+  const decliningItems = Object.entries(productMetrics)
+    .filter(([, m]) => m.trend === 'down')
+    .map(([p]) => p);
 
 
   return (
@@ -129,6 +140,9 @@ export default function Inventory() {
                     key={item.category}
                     island={selectedIsland}
                     item={item}
+                    onMetricsUpdate={(product, metrics) =>
+                      setProductMetrics((prev) => ({ ...prev, [product]: metrics }))
+                    }
                   />
                 ))}
               </TableBody>
@@ -141,7 +155,7 @@ export default function Inventory() {
 }
 
 // Separate row component to fetch per-product forecast data
-function ProductInventoryRow({ island, item }: { island: string; item: InventoryItem }) {
+function ProductInventoryRow({ island, item, onMetricsUpdate }: { island: string; item: InventoryItem; onMetricsUpdate?: (product: string, metrics: { current: number; next: number; trend: 'up'|'down'|'stable'; trendPercent: number }) => void }) {
   const { data: forecast = [], isLoading } = useForecast(island, item.category as string) as any;
 
   const current = forecast.slice(-1)[0];
@@ -152,6 +166,17 @@ function ProductInventoryRow({ island, item }: { island: string; item: Inventory
 
   const trendPercent = currentVal > 0 ? Math.abs(((nextVal - currentVal) / (currentVal || 1)) * 100) : 0;
   const trend: 'up' | 'down' | 'stable' = nextVal - currentVal > 5 ? 'up' : nextVal - currentVal < -5 ? 'down' : 'stable';
+
+  // Report metrics back to parent so summary cards can use real data
+  useMemo(() => {
+    onMetricsUpdate?.(item.category as string, {
+      current: currentVal,
+      next: nextVal,
+      trend,
+      trendPercent,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentVal, nextVal, trend, trendPercent]);
 
   return (
     <TableRow key={item.category}>

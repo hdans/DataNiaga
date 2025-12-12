@@ -172,28 +172,42 @@ export default function Quality() {
                 <div className="p-3 rounded-lg bg-success/10 border border-success/30">
                   <p className="text-xs text-success font-medium">Best Performer</p>
                     <p className="text-sm font-semibold text-foreground mt-1">
-                      {Object.values(metricsMap).length
-                        ? Object.entries(metricsMap).reduce((best, [prod, curr]: any) => {
-                            return curr.mape < best[1].mape ? [prod, curr] : best;
-                          }, ['', { mape: Infinity }])[0]
-                        : '-'}
+                                {(() => {
+                                  const entries = Object.entries(metricsMap) as [string, { mae: number; mape: number; quality: string }][];
+                                  if (entries.length === 0) return '-';
+                                  let best = entries[0];
+                                  for (const e of entries) {
+                                    if (e[1].mape < best[1].mape) best = e;
+                                  }
+                                  return best[0];
+                                })()}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      MAPE: {Object.values(metricsMap).length ? Math.min(...Object.values(metricsMap).map((f) => f.mape)).toFixed(1) : '-'}%
+                                MAPE: {(() => {
+                                  const vals = Object.values(metricsMap).map((f) => f.mape);
+                                  return vals.length ? Math.min(...vals).toFixed(1) : '-';
+                                })()}%
                     </p>
                 </div>
 
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30">
                   <p className="text-xs text-destructive font-medium">Needs Attention</p>
                     <p className="text-sm font-semibold text-foreground mt-1">
-                      {Object.values(metricsMap).length
-                        ? Object.entries(metricsMap).reduce((worst, [prod, curr]: any) => {
-                            return curr.mape > worst[1].mape ? [prod, curr] : worst;
-                          }, ['', { mape: -Infinity }])[0]
-                        : '-'}
+                                {(() => {
+                                  const entries = Object.entries(metricsMap) as [string, { mae: number; mape: number; quality: string }][];
+                                  if (entries.length === 0) return '-';
+                                  let worst = entries[0];
+                                  for (const e of entries) {
+                                    if (e[1].mape > worst[1].mape) worst = e;
+                                  }
+                                  return worst[0];
+                                })()}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      MAPE: {Object.values(metricsMap).length ? Math.max(...Object.values(metricsMap).map((f) => f.mape)).toFixed(1) : '-'}%
+                                MAPE: {(() => {
+                                  const vals = Object.values(metricsMap).map((f) => f.mape);
+                                  return vals.length ? Math.max(...vals).toFixed(1) : '-';
+                                })()}%
                     </p>
                 </div>
               </div>

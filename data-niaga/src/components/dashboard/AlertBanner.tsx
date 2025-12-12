@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { AlertTriangle, TrendingUp, Package, X } from 'lucide-react';
-import { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useDashboardSummary, useRecommendations } from '@/hooks/useApi';
 
 interface Alert {
   id: string;
@@ -8,21 +9,6 @@ interface Alert {
   title: string;
   message: string;
 }
-
-const alerts: Alert[] = [
-  {
-    id: '1',
-    type: 'warning',
-    title: 'Stockout Risk',
-    message: 'KOSMETIK inventory in JAWA region may run out in 2 weeks based on current forecast.',
-  },
-  {
-    id: '2',
-    type: 'success',
-    title: 'Opportunity Detected',
-    message: 'High demand predicted for SKINCARE next month. Consider increasing purchase orders.',
-  },
-];
 
 const typeStyles = {
   warning: {
@@ -42,12 +28,67 @@ const typeStyles = {
   },
 };
 
-export function AlertBanner() {
-  const [visibleAlerts, setVisibleAlerts] = useState(alerts);
+interface AlertBannerProps {
+  island?: string;
+}
 
-  const dismissAlert = (id: string) => {
-    setVisibleAlerts(prev => prev.filter(a => a.id !== id));
-  };
+export function AlertBanner({ island }: AlertBannerProps) {
+  const { data: summary } = useDashboardSummary();
+  const { data: recommendations } = useRecommendations(island);
+
+  const [visibleAlerts, setVisibleAlerts] = useState<Alert[]>([]);
+
+  useEffect(() => {
+    const next: Alert[] = [];
+
+    // Priority: explicit recommendations from API
+    if (recommendations && recommendations.length > 0) {
+      // Map top 3 recommendations to alerts
+      recommendations.slice(0, 3).forEach((r: any, idx: number) => {
+        next.push({
+          id: `rec-${idx}`,
+          type: r.type === 'derived_demand' ? 'warning' : 'info',
+          title: r.type === 'derived_demand' ? 'Derived Demand' : 'Recommendation',
+          message: r.action || `${r.product} -> ${r.related_product || ''}`,
+        });
+      });
+    }
+
+    // Add summary-based alerts
+    if (summary) {
+      if (summary.stockout_risks && summary.stockout_risks > 0) {
+        next.unshift({
+          id: 'stockout-risk',
+          type: 'warning',
+          title: 'Stockout Risk',
+          message: `${summary.stockout_risks} items at risk of stockout. Review replenishment plans.`,
+        });
+      }
+
+      if (summary.opportunities && summary.opportunities > 0) {
+        next.push({
+          id: 'opps',
+          type: 'success',
+          title: 'Opportunities Detected',
+          message: `${summary.opportunities} bundling/promo opportunities identified.`,
+        });
+      }
+    }
+
+    // If nothing from API, show a conservative static hint
+    if (next.length === 0) {
+      next.push({
+        id: 'static-1',
+        type: 'info',
+        title: 'No immediate alerts',
+        message: 'No alerts detected. Upload a dataset to generate forecasts and recommendations.',
+      });
+    }
+
+    setVisibleAlerts(next);
+  }, [summary, recommendations]);
+
+  const dismissAlert = (id: string) => setVisibleAlerts((prev) => prev.filter((a) => a.id !== id));
 
   if (visibleAlerts.length === 0) return null;
 
