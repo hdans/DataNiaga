@@ -50,3 +50,15 @@ class UserSession(Base):
     role = Column(String)
     company = Column(String)
     created_at = Column(DateTime)
+
+
+class ModelMetric(Base):
+    """Model untuk menyimpan metrik evaluasi model per pulau & kategori."""
+    __tablename__ = "model_metrics"
+
+    id = Column(Integer, primary_key=True, index=True)
+    pulau = Column(String, index=True)
+    product_category = Column(String, index=True)
+    mae = Column(Float)
+    mape = Column(Float)
+    sample_size = Column(Integer)

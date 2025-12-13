@@ -9,13 +9,14 @@ Endpoints untuk upload data, forecasting, MBA, dan recommendations.
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
 from typing import Optional, List
 
 from database import engine, get_db, Base
-from models import Forecast, MBARule, Recommendation, UserSession
+from models import Forecast, MBARule, Recommendation, UserSession, ModelMetric
 from schemas import (
     UserCreate, UserResponse, ForecastResponse, MBARuleResponse, 
     RecommendationResponse, DashboardSummary, UploadResponse
@@ -123,13 +124,52 @@ async def upload_data(
     db.query(Forecast).delete()
     db.query(MBARule).delete()
     db.query(Recommendation).delete()
+    # Clear previous model metrics
+    try:
+        db.query(ModelMetric).delete()
+    except Exception:
+        pass
     
     # Run forecasting pipeline
     print("Starting forecasting pipeline...")
-    forecasts = run_all_forecasts(df)
-    for f in forecasts:
+    forecast_result = run_all_forecasts(df)
+    # run_all_forecasts now returns a dict: { 'forecast_data': [...], 'model_metrics': [...] }
+    forecast_records = forecast_result.get('forecast_data', []) if isinstance(forecast_result, dict) else (forecast_result or [])
+    model_metrics = forecast_result.get('model_metrics', []) if isinstance(forecast_result, dict) else []
+
+    # Persist forecasts (list of dicts)
+    for f in forecast_records:
+        # ensure week is a datetime object; if it's a string, parse it
+        try:
+            if isinstance(f.get('week'), str):
+                f['week'] = datetime.fromisoformat(f['week'])
+        except Exception:
+            # fallback: let SQLAlchemy attempt conversion or store null
+            pass
         db.add(Forecast(**f))
-    print(f"Generated {len(forecasts)} forecast records")
+
+    # Persist model metrics into DB (if any)
+    persisted_metrics = []
+    for m in model_metrics:
+        try:
+            # Normalize pulau and product_category to avoid casing/whitespace mismatches
+            pulau_norm = str(m.get('pulau') or '').strip().lower()
+            product_norm = str(m.get('product_category') or '').strip().lower()
+
+            metric_row = ModelMetric(
+                pulau=pulau_norm,
+                product_category=product_norm,
+                mae=float(m.get('mae') or 0.0),
+                mape=float(m.get('mape') or 0.0),
+                sample_size=int(m.get('sample_size') or 0)
+            )
+            db.add(metric_row)
+            persisted_metrics.append(metric_row)
+        except Exception:
+            # skip bad entries
+            continue
+
+    print(f"Generated {len(forecast_records)} forecast records and {len(persisted_metrics)} metric entries")
     
     # Run MBA pipeline
     print("Starting MBA pipeline...")
@@ -140,7 +180,8 @@ async def upload_data(
     
     # Generate recommendations
     print("Generating recommendations...")
-    recommendations = generate_recommendations(df, forecasts, rules)
+    # Pass the list of forecast records (not the wrapper dict)
+    recommendations = generate_recommendations(df, forecast_records, rules)
     for rec in recommendations:
         db.add(Recommendation(**rec))
     print(f"Generated {len(recommendations)} recommendations")
@@ -223,31 +264,216 @@ async def get_dashboard_summary(db: Session = Depends(get_db)):
 # FORECAST ENDPOINTS
 # ============================================
 
-@app.get("/api/forecast", response_model=List[ForecastResponse])
+@app.get("/api/forecast")
 async def get_forecast(
     pulau: Optional[str] = Query(None, description="Filter by island name"),
     product: Optional[str] = Query(None, description="Filter by product category"),
     db: Session = Depends(get_db)
 ):
-    """Get forecast data for charting."""
+    """Get forecast data for charting.
+
+    Returns a dict with keys:
+      - forecast_data: list of forecast rows
+      - model_metrics: list of metrics (mae/mape) per pulau/product_category
+
+    Backwards-compatible: clients expecting a flat list should still be able to
+    consume `forecast_data` property (the frontend handles both shapes).
+    """
     query = db.query(Forecast)
-    
+
+    # Case-insensitive filtering: normalize incoming params and compare with lower(column)
     if pulau:
-        query = query.filter(Forecast.pulau == pulau)
+        pulau_norm = pulau.strip().lower()
+        query = query.filter(func.lower(Forecast.pulau) == pulau_norm)
     if product:
-        query = query.filter(Forecast.product_category == product)
-    
+        product_norm = product.strip().lower()
+        query = query.filter(func.lower(Forecast.product_category) == product_norm)
+
     forecasts = query.order_by(Forecast.week).all()
-    
-    return [
-        ForecastResponse(
-            week=f.week.strftime('%Y-%m-%d'),
-            actual=f.actual,
-            predicted=f.predicted,
-            is_forecast=bool(f.is_forecast)
-        ) 
+
+    forecast_list = [
+        {
+            'week': f.week.strftime('%Y-%m-%d') if f.week else None,
+            'actual': f.actual,
+            'predicted': f.predicted,
+            'is_forecast': bool(f.is_forecast),
+            'pulau': f.pulau,
+            'product_category': f.product_category,
+        }
         for f in forecasts
     ]
+
+    # If no forecast rows were found for the requested pulau+product combination,
+    # try a product-only fallback using case-insensitive LIKE so product
+    # variants still return useful forecast rows (e.g. 'kacang tanah').
+    if product and not forecast_list:
+        alt_query = db.query(Forecast)
+        alt_query = alt_query.filter(func.lower(Forecast.product_category).like(f"%{product_norm}%"))
+        alt_forecasts = alt_query.order_by(Forecast.week).all()
+        if alt_forecasts:
+            forecast_list = [
+                {
+                    'week': f.week.strftime('%Y-%m-%d') if f.week else None,
+                    'actual': f.actual,
+                    'predicted': f.predicted,
+                    'is_forecast': bool(f.is_forecast),
+                    'pulau': f.pulau,
+                    'product_category': f.product_category,
+                }
+                for f in alt_forecasts
+            ]
+
+    # Get metrics from ModelMetric table (case-insensitive match)
+    metric_query = db.query(ModelMetric)
+    if pulau:
+        metric_query = metric_query.filter(func.lower(ModelMetric.pulau) == pulau_norm)
+    if product:
+        # Allow partial/variant matches for product names (case-insensitive LIKE)
+        metric_query = metric_query.filter(func.lower(ModelMetric.product_category).like(f"%{product_norm}%"))
+
+    metrics = metric_query.all()
+    metrics_list = [
+        {
+            'pulau': m.pulau,
+            'product_category': m.product_category,
+            'mae': m.mae,
+            'mape': m.mape,
+            'sample_size': m.sample_size,
+        }
+        for m in metrics
+    ]
+
+    # Fallback: if caller requested a specific product but no metrics were found
+    # for the provided pulau, try a product-only match so aggregated pulau
+    # values like "jawa, bali, & nt" still surface the metric.
+    if product and not metrics_list:
+        alt_metrics = (
+            db.query(ModelMetric)
+            .filter(func.lower(ModelMetric.product_category).like(f"%{product_norm}%"))
+            .order_by(ModelMetric.pulau, ModelMetric.product_category)
+            .all()
+        )
+        if alt_metrics:
+            metrics_list = [
+                {
+                    'pulau': m.pulau,
+                    'product_category': m.product_category,
+                    'mae': m.mae,
+                    'mape': m.mape,
+                    'sample_size': m.sample_size,
+                }
+                for m in alt_metrics
+            ]
+
+    return {
+        'forecast_data': forecast_list,
+        'model_metrics': metrics_list,
+    }
+
+
+@app.get("/api/forecast/metrics")
+async def get_forecast_metrics(
+    pulau: Optional[str] = Query(None, description="Filter by island name"),
+    product: Optional[str] = Query(None, description="Filter by product category"),
+    db: Session = Depends(get_db)
+):
+    """Return stored model metrics for debugging.
+
+    Example response:
+      [
+        {"pulau": "Bali", "product_category": "Roti", "mae": 15.5, "mape": 12.5, "sample_size": 40},
+        ...
+      ]
+    """
+    metric_query = db.query(ModelMetric)
+    if pulau:
+        pulau_norm = pulau.strip().lower()
+        metric_query = metric_query.filter(func.lower(ModelMetric.pulau) == pulau_norm)
+    if product:
+        product_norm = product.strip().lower()
+        # Allow partial/variant matches for product names when querying stored metrics
+        metric_query = metric_query.filter(func.lower(ModelMetric.product_category).like(f"%{product_norm}%"))
+
+    metrics = metric_query.order_by(ModelMetric.pulau, ModelMetric.product_category).all()
+
+    if metrics:
+        return [
+            {
+                'pulau': m.pulau,
+                'product_category': m.product_category,
+                'mae': m.mae,
+                'mape': m.mape,
+                'sample_size': m.sample_size,
+            }
+            for m in metrics
+        ]
+
+    # If product was requested but no metrics found for the given pulau,
+    # try returning any metrics that match the product across all pulau values.
+    if product:
+        alt_metrics = (
+            db.query(ModelMetric)
+            .filter(func.lower(ModelMetric.product_category).like(f"%{product_norm}%"))
+            .order_by(ModelMetric.pulau, ModelMetric.product_category)
+            .all()
+        )
+        if alt_metrics:
+            return [
+                {
+                    'pulau': m.pulau,
+                    'product_category': m.product_category,
+                    'mae': m.mae,
+                    'mape': m.mape,
+                    'sample_size': m.sample_size,
+                }
+                for m in alt_metrics
+            ]
+
+    # Fallback: compute metrics on-the-fly from historical Forecast rows
+    # This ensures the endpoint returns useful data even when persisted metrics are not available.
+    hist_query = db.query(Forecast).filter(Forecast.is_forecast == 0)
+    if pulau:
+        pulau_norm = pulau.strip().lower()
+        hist_query = hist_query.filter(func.lower(Forecast.pulau) == pulau_norm)
+    if product:
+        product_norm = product.strip().lower()
+        # Use LIKE to include partial matches from stored product_category values
+        hist_query = hist_query.filter(func.lower(Forecast.product_category).like(f"%{product_norm}%"))
+
+    historical = hist_query.all()
+    if not historical:
+        return []
+
+    # Aggregate per (pulau, product_category)
+    agg = {}
+    for h in historical:
+        key = (h.pulau, h.product_category)
+        if key not in agg:
+            agg[key] = {
+                'errors': [],
+                'mape_vals': [],
+                'count': 0,
+            }
+        if h.actual is not None and h.predicted is not None:
+            err = abs((h.actual or 0) - (h.predicted or 0))
+            agg[key]['errors'].append(err)
+            if h.actual and h.actual != 0:
+                agg[key]['mape_vals'].append(abs((h.actual - h.predicted) / h.actual) * 100)
+        agg[key]['count'] += 1
+
+    results = []
+    for (pul, prod), v in agg.items():
+        mae = float(sum(v['errors']) / len(v['errors'])) if v['errors'] else 0.0
+        mape = float(sum(v['mape_vals']) / len(v['mape_vals'])) if v['mape_vals'] else 0.0
+        results.append({
+            'pulau': pul,
+            'product_category': prod,
+            'mae': round(mae, 2),
+            'mape': round(mape, 2),
+            'sample_size': v['count'],
+        })
+
+    return results
 
 
 # ============================================
@@ -347,6 +573,19 @@ async def get_products(
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/api/debug/products")
+async def debug_products(pulau: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    """Return distinct product_category values present in forecasts (for debugging).
+
+    Helps detect casing/whitespace mismatches (returns raw stored strings).
+    """
+    query = db.query(Forecast.product_category).distinct()
+    if pulau:
+        query = query.filter(func.lower(Forecast.pulau) == pulau.strip().lower())
+    rows = query.all()
+    return [r[0] for r in rows if r[0]]
 
 
 # ============================================

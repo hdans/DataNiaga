@@ -109,17 +109,18 @@ export default function Dashboard() {
       setComputedLoading(true);
 
       try {
-        const list = (products || []).slice(0, N);
-        // fetch forecasts in parallel
-        const promises = list.map((p) => api.getForecast(selectedIsland, p).catch(() => []));
-        const results = await Promise.all(promises);
+  const list = (products || []).slice(0, N);
+  // fetch forecasts in parallel (backend may return { forecast_data, model_metrics })
+  const promises = list.map((p) => api.getForecast(selectedIsland, p).catch(() => null));
+  const results = await Promise.all(promises);
 
         // stockout: next < current
         let stockout = 0;
         const perProductMAPEs: number[] = [];
 
         for (let i = 0; i < list.length; i++) {
-          const rows = results[i] || [];
+          const res = results[i] || null;
+          const rows = (res && res.forecast_data) ? res.forecast_data : (res || []);
           if (!rows.length) continue;
 
           const current = rows.slice(-2)[0] ?? rows[rows.length - 1];
@@ -148,7 +149,8 @@ export default function Dashboard() {
           const derived = new Set<string>();
           for (let i = 0; i < list.length; i++) {
             const product = list[i];
-            const rows = results[i] || [];
+            const res = results[i] || null;
+            const rows = (res && res.forecast_data) ? res.forecast_data : (res || []);
             if (!rows.length) continue;
             const current = rows.slice(-2)[0] ?? rows[rows.length - 1];
             const next = rows[rows.length - 1];

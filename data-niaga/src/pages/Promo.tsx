@@ -35,17 +35,18 @@ export default function Promo() {
       const suggestions: PromoSuggestion[] = [];
       const list = (products || []).slice(0, 24);
 
-      // fetch forecasts in parallel
-      const promises = list.map((p) => api.getForecast(selectedIsland, p).catch(() => []));
-      const results = await Promise.all(promises);
+  // fetch forecasts in parallel (backend now returns { forecast_data, model_metrics })
+  const promises = list.map((p) => api.getForecast(selectedIsland, p).catch(() => null));
+  const results = await Promise.all(promises);
 
       for (let i = 0; i < list.length; i++) {
         const product = list[i];
-        const rows = results[i] || [];
-        if (!rows.length) continue;
+  const res = results[i] || null;
+  const rows = (res && res.forecast_data) ? res.forecast_data : (res || []);
+  if (!rows || !rows.length) continue;
 
-        const current = rows.slice(-1)[0];
-        const next = rows.find((r: any) => r.is_forecast) || rows[rows.length - 1];
+  const current = rows.slice(-1)[0];
+  const next = rows.find((r: any) => r.is_forecast) || rows[rows.length - 1];
 
         const currentVal = current ? Math.round(current.predicted || 0) : 0;
         const nextVal = next ? Math.round(next.predicted || 0) : 0;

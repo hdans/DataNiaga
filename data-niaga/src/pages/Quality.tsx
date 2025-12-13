@@ -1,5 +1,6 @@
 import React from 'react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
+import { IslandSelector } from '@/components/dashboard/IslandSelector';
 import { useProducts, useIslands, useForecast } from '@/hooks/useApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,26 +23,26 @@ import {
   Tooltip,
 } from 'recharts';
 
-const qualityConfig = {
-  Excellent: {
+const qualityConfig: Record<string, any> = {
+  'Highly Accurate': {
     icon: Star,
     color: 'text-success',
     bg: 'bg-success/10',
     border: 'border-success/30',
   },
-  Good: {
+  'Good': {
     icon: CheckCircle2,
     color: 'text-primary',
     bg: 'bg-primary/10',
     border: 'border-primary/30',
   },
-  Fair: {
+  'Reasonable': {
     icon: AlertCircle,
     color: 'text-warning',
     bg: 'bg-warning/10',
     border: 'border-warning/30',
   },
-  Poor: {
+  'Inaccurate': {
     icon: XCircle,
     color: 'text-destructive',
     bg: 'bg-destructive/10',
@@ -50,11 +51,22 @@ const qualityConfig = {
 };
 
 const CHART_COLORS = [
-  'hsl(142, 76%, 36%)', // success - Excellent
+  'hsl(142, 76%, 36%)', // success - Highly Accurate
   'hsl(265, 89%, 55%)', // primary - Good
-  'hsl(38, 92%, 50%)',  // warning - Fair
-  'hsl(0, 84%, 60%)',   // destructive - Poor
+  'hsl(38, 92%, 50%)',  // warning - Reasonable
+  'hsl(0, 84%, 60%)',   // destructive - Inaccurate
 ];
+
+// Map quality category names to their HSL colors
+const getQualityColor = (qualityName: string): string => {
+  const colorMap: Record<string, string> = {
+    'Highly Accurate': 'hsl(142, 76%, 36%)',  // success green
+    'Good': 'hsl(265, 89%, 55%)',              // primary purple
+    'Reasonable': 'hsl(38, 92%, 50%)',         // warning orange
+    'Inaccurate': 'hsl(0, 84%, 60%)',          // destructive red
+  };
+  return colorMap[qualityName] || 'hsl(200, 14%, 97%)'; // fallback to neutral
+};
 
 export default function Quality() {
   const { data: products = [] } = useProducts();
@@ -82,16 +94,27 @@ export default function Quality() {
     <DashboardLayout>
       <div className="p-6 space-y-6">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Model Quality</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Forecasting accuracy metrics and performance evaluation
-          </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Kualitas Model</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Metrik akurasi peramalan dan evaluasi kinerja model
+            </p>
+          </div>
+          <div className="ml-auto">
+            <IslandSelector
+              selected={selectedIsland}
+              onChange={(val) => {
+                setSelectedIsland(val);
+                setMetricsMap({}); // reset metrics when region changes
+              }}
+            />
+          </div>
         </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {(['Excellent', 'Good', 'Fair', 'Poor'] as const).map((quality) => {
+          {(Object.keys(qualityConfig) as string[]).map((quality) => {
             const config = qualityConfig[quality];
             const Icon = config.icon;
             const count = qualityCounts[quality] || 0;
@@ -117,8 +140,8 @@ export default function Quality() {
           {/* Pie Chart */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Quality Distribution</CardTitle>
-            </CardHeader>
+                <CardTitle className="text-base">Distribusi Kualitas</CardTitle>
+              </CardHeader>
             <CardContent>
               <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -134,10 +157,10 @@ export default function Quality() {
                       label={({ name, value }) => `${name}: ${value}`}
                       labelLine={false}
                     >
-                      {pieData.map((entry, index) => (
+                      {pieData.map((entry) => (
                         <Cell
-                          key={`cell-${index}`}
-                          fill={CHART_COLORS[index % CHART_COLORS.length]}
+                          key={`cell-${entry.name}`}
+                          fill={getQualityColor(entry.name)}
                         />
                       ))}
                     </Pie>
@@ -154,17 +177,17 @@ export default function Quality() {
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
                 <Target className="w-5 h-5" />
-                Key Metrics
+                Metrik Utama
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-4 rounded-lg bg-muted/50">
-                <p className="text-sm text-muted-foreground">Average MAPE</p>
+                <p className="text-sm text-muted-foreground">Rata-rata MAPE</p>
                 <p className="text-3xl font-bold text-foreground mt-1">
                   {avgMape.toFixed(1)}%
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Mean Absolute Percentage Error across all models
+                  Mean Absolute Percentage Error (MAPE) dari seluruh model
                 </p>
               </div>
 
@@ -224,11 +247,11 @@ export default function Quality() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Region</TableHead>
+                  <TableHead>Kategori</TableHead>
+                  <TableHead>Wilayah</TableHead>
                   <TableHead className="text-right">MAE</TableHead>
                   <TableHead className="text-right">MAPE</TableHead>
-                  <TableHead className="text-center">Quality</TableHead>
+                  <TableHead className="text-center">Kualitas</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -250,19 +273,70 @@ export default function Quality() {
 }
 
 function mapMapeToQuality(mape: number) {
-  if (mape <= 10) return 'Excellent';
-  if (mape <= 20) return 'Good';
-  if (mape <= 30) return 'Fair';
-  return 'Poor';
+  // Use English labels as requested:
+  // <10% => Highly Accurate
+  // 10% - 20% => Good
+  // 20% - 50% => Reasonable
+  // >50% => Inaccurate
+  if (mape < 10) return 'Highly Accurate';
+  if (mape >= 10 && mape <= 20) return 'Good';
+  if (mape > 20 && mape <= 50) return 'Reasonable';
+  return 'Inaccurate';
 }
 
 function ProductQualityRow({ island, product, onMetric }: { island: string; product: string; onMetric: (m: { mae: number; mape: number; quality: string }) => void }) {
-  const { data: rows = [], isLoading } = useForecast(island, product) as any;
+  const { data, isLoading } = useForecast(island, product) as any;
+  const rows = (data && data.forecast_data) ? data.forecast_data : (data || []);
+  const metrics = (data && data.model_metrics) ? data.model_metrics : [];
+
+  // Local state to display values
+  const [maeDisplay, setMaeDisplay] = React.useState<number | string>(isLoading ? '—' : '-');
+  const [mapeDisplay, setMapeDisplay] = React.useState<number | string>(isLoading ? '—' : '-');
+  const [qualityDisplay, setQualityDisplay] = React.useState<string>(isLoading ? 'Loading…' : '-');
 
   React.useEffect(() => {
-    if (!rows || rows.length === 0) return;
+    // Try to find a matching metric from the backend first
+    const normalize = (s: any) => (s || '').toString().toLowerCase().trim();
+    const cat = normalize(product);
+    const isl = normalize(island);
+
+    let matched: any = undefined;
+    if (Array.isArray(metrics) && metrics.length) {
+      matched = metrics.find((m: any) => {
+        const mp = normalize(m.product_category || m.product);
+        const pul = normalize(m.pulau || m.region);
+        return (mp === cat && pul === isl) || mp === cat || mp.includes(cat) || cat.includes(mp);
+      });
+    }
+
+    if (matched) {
+      const mape = typeof matched.mape === 'number' ? matched.mape : parseFloat(matched.mape) || 0;
+      const mae = matched.mae ?? matched.MAE ?? 0;
+      const quality = mapMapeToQuality(mape);
+      setMaeDisplay(typeof mae === 'number' ? mae.toFixed(2) : String(mae));
+      setMapeDisplay(Number(mape).toFixed(1));
+      setQualityDisplay(quality);
+      onMetric({ mae: Number(mae), mape: Number(mape), quality });
+      return;
+    }
+
+    // Fallback: compute from historical rows
+    if (!rows || rows.length === 0) {
+      setMaeDisplay('-');
+      setMapeDisplay('-');
+  setQualityDisplay('Inaccurate');
+  onMetric({ mae: 0, mape: 0, quality: 'Inaccurate' });
+      return;
+    }
+
     const historical = rows.filter((r: any) => !r.is_forecast && r.actual != null);
-    if (historical.length === 0) return onMetric({ mae: 0, mape: 0, quality: 'Poor' });
+    if (!historical || historical.length === 0) {
+      setMaeDisplay('-');
+      setMapeDisplay('-');
+  setQualityDisplay('Inaccurate');
+  onMetric({ mae: 0, mape: 0, quality: 'Inaccurate' });
+      return;
+    }
 
     const errors = historical.map((h: any) => Math.abs(h.actual - h.predicted));
     const maes = errors.reduce((a: number, b: number) => a + b, 0) / errors.length;
@@ -270,10 +344,12 @@ function ProductQualityRow({ island, product, onMetric }: { island: string; prod
       .map((h: any) => (h.actual > 0 ? Math.abs((h.actual - h.predicted) / h.actual) * 100 : 0));
     const mape = mapes.reduce((a: number, b: number) => a + b, 0) / mapes.length;
 
-    onMetric({ mae: maes, mape, quality: mapMapeToQuality(mape) });
-  }, [rows]);
-
-  const config = { color: 'text-muted-foreground' } as any;
+    setMaeDisplay(maes.toFixed(2));
+    setMapeDisplay(mape.toFixed(1));
+    const quality = mapMapeToQuality(mape);
+    setQualityDisplay(quality);
+    onMetric({ mae: maes, mape, quality });
+  }, [data, rows, metrics, isLoading, product, island]);
 
   return (
     <TableRow>
@@ -281,10 +357,10 @@ function ProductQualityRow({ island, product, onMetric }: { island: string; prod
         <Badge variant="outline">{product}</Badge>
       </TableCell>
       <TableCell className="text-sm text-muted-foreground">{island}</TableCell>
-      <TableCell className="text-right font-mono text-sm">{isLoading ? '—' : '-'}</TableCell>
-      <TableCell className="text-right font-mono text-sm">{isLoading ? '—' : '-'}</TableCell>
+      <TableCell className="text-right font-mono text-sm">{isLoading ? '—' : maeDisplay}</TableCell>
+      <TableCell className="text-right font-mono text-sm">{isLoading ? '—' : mapeDisplay}</TableCell>
       <TableCell>
-        <div className="text-xs text-muted-foreground">{isLoading ? 'Loading…' : '-'}</div>
+        <div className="text-xs text-muted-foreground">{isLoading ? 'Loading…' : qualityDisplay}</div>
       </TableCell>
     </TableRow>
   );

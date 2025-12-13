@@ -242,14 +242,14 @@ export interface ForecastQuality {
   pulau: Island;
   mae: number;
   mape: number;
-  quality: 'Excellent' | 'Good' | 'Fair' | 'Poor';
+  quality: 'Highly Accurate' | 'Good' | 'Reasonable' | 'Inaccurate';
 }
 
 export const forecastQuality: ForecastQuality[] = [
-  { category: 'KOSMETIK', pulau: 'JAWA, BALI, & NT', mae: 12.3, mape: 8.5, quality: 'Excellent' },
+  { category: 'KOSMETIK', pulau: 'JAWA, BALI, & NT', mae: 12.3, mape: 8.5, quality: 'Highly Accurate' },
   { category: 'SKINCARE', pulau: 'JAWA, BALI, & NT', mae: 15.7, mape: 11.2, quality: 'Good' },
   { category: 'MAKANAN', pulau: 'KALIMANTAN & SULAWESI', mae: 28.4, mape: 14.8, quality: 'Good' },
   { category: 'MINUMAN', pulau: 'KALIMANTAN & SULAWESI', mae: 22.1, mape: 12.3, quality: 'Good' },
-  { category: 'HOUSEHOLD', pulau: 'SUMATERA & RIAU', mae: 35.6, mape: 22.5, quality: 'Fair' },
-  { category: 'ELEKTRONIK', pulau: 'JAWA, BALI, & NT', mae: 8.2, mape: 32.1, quality: 'Fair' },
+  { category: 'HOUSEHOLD', pulau: 'SUMATERA & RIAU', mae: 35.6, mape: 22.5, quality: 'Reasonable' },
+  { category: 'ELEKTRONIK', pulau: 'JAWA, BALI, & NT', mae: 8.2, mape: 32.1, quality: 'Reasonable' },
 ];

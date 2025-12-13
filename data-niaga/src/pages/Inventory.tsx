@@ -156,7 +156,8 @@ export default function Inventory() {
 
 // Separate row component to fetch per-product forecast data
 function ProductInventoryRow({ island, item, onMetricsUpdate }: { island: string; item: InventoryItem; onMetricsUpdate?: (product: string, metrics: { current: number; next: number; trend: 'up'|'down'|'stable'; trendPercent: number }) => void }) {
-  const { data: forecast = [], isLoading } = useForecast(island, item.category as string) as any;
+  const { data, isLoading } = useForecast(island, item.category as string) as any;
+  const forecast = (data && data.forecast_data) ? data.forecast_data : (data || []);
 
   const current = forecast.slice(-1)[0];
   const next = forecast.find((f: any) => f.is_forecast) || null;
