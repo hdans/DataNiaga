@@ -20,9 +20,9 @@ interface DashboardLayoutProps {
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-  { icon: TrendingUp, label: 'Forecasts', path: '/forecasts' },
-  { icon: Package, label: 'Smart Inventory', path: '/inventory' },
-  { icon: Gift, label: 'Promo Planner', path: '/promo' },
+  { icon: TrendingUp, label: 'Forecast', path: '/forecasts' },
+  { icon: Package, label: 'Inventory', path: '/inventory' },
+  { icon: Gift, label: 'Promo Plan', path: '/promo' },
   { icon: MapPin, label: 'Store Layout', path: '/layout' },
   { icon: BarChart3, label: 'Model Quality', path: '/quality' },
 ];
@@ -88,7 +88,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             activeClassName="bg-primary/10 text-primary font-medium"
           >
             <Settings className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span>Settings</span>}
+            {!collapsed && <span>Pengaturan</span>}
           </NavLink>
         </div>
       </aside>

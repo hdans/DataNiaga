@@ -6,7 +6,7 @@ import { useProducts, useMBARules } from '@/hooks/useApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { MapPin, ArrowRight, Sparkles, LayoutGrid } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, toTitleCase } from '@/lib/utils';
 
 interface LayoutSuggestion {
   product1: ProductCategory;
@@ -31,10 +31,10 @@ export default function StoreLayout() {
         confidence: rule.confidence || 0,
         recommendation:
           (rule.lift || 0) >= 3.5
-            ? 'Place adjacent - Very strong correlation'
+            ? 'Tempatkan bersebelahan - Korelasi sangat kuat'
             : (rule.lift || 0) >= 2.5
-            ? 'Place nearby - Strong correlation'
-            : 'Consider proximity - Moderate correlation',
+            ? 'Tempatkan di dekat - Korelasi kuat'
+            : 'Pertimbangkan kedekatan - Korelasi moderat',
       }))
       .sort((a, b) => b.lift - a.lift);
 
@@ -59,9 +59,9 @@ export default function StoreLayout() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Store Layout Optimizer</h1>
+            <h1 className="text-2xl font-bold text-foreground">Pengoptimal Tata Letak Toko</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Product placement suggestions based on purchase correlations
+              Saran penempatan produk berdasarkan korelasi pembelian
             </p>
           </div>
           <IslandSelector selected={selectedIsland} onChange={setSelectedIsland} />
@@ -72,7 +72,7 @@ export default function StoreLayout() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <LayoutGrid className="w-5 h-5" />
-              Suggested Store Layout
+              Tata Letak Toko yang Disarankan
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -93,8 +93,8 @@ export default function StoreLayout() {
                         : 'border-border bg-muted/30'
                     )}
                   >
-                    <div className="text-xs text-muted-foreground mb-1">Zone {idx + 1}</div>
-                    <div className="font-semibold text-sm text-foreground">{category}</div>
+                    <div className="text-xs text-muted-foreground mb-1">Zona {idx + 1}</div>
+                    <div className="font-semibold text-sm text-foreground">{toTitleCase(category)}</div>
                     {hasStrongPair && (
                       <Sparkles className="w-4 h-4 text-primary mx-auto mt-2" />
                     )}
@@ -103,7 +103,7 @@ export default function StoreLayout() {
               })}
             </div>
             <p className="text-xs text-muted-foreground mt-4 text-center">
-              Products with strong correlations should be placed in adjacent zones
+              Produk dengan korelasi kuat harus ditempatkan di zona yang berdekatan
             </p>
           </CardContent>
         </Card>
@@ -112,7 +112,7 @@ export default function StoreLayout() {
         <div>
           <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
             <MapPin className="w-5 h-5 text-primary" />
-            Placement Recommendations
+            Rekomendasi Penempatan
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -122,11 +122,11 @@ export default function StoreLayout() {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <Badge variant="secondary" className="font-medium">
-                        {suggestion.product1}
+                        {toTitleCase(suggestion.product1)}
                       </Badge>
                       <ArrowRight className="w-4 h-4 text-muted-foreground" />
                       <Badge variant="secondary" className="font-medium">
-                        {suggestion.product2}
+                        {toTitleCase(suggestion.product2)}
                       </Badge>
                     </div>
                     <Badge className={cn('border', getLiftColor(suggestion.lift))}>
@@ -139,7 +139,7 @@ export default function StoreLayout() {
                   </p>
 
                   <div className="flex items-center gap-4 mt-3 text-xs text-muted-foreground">
-                    <span>Confidence: {(suggestion.confidence * 100).toFixed(0)}%</span>
+                    <span>Kepercayaan: {(suggestion.confidence * 100).toFixed(0)}%</span>
                     <span>Lift: {suggestion.lift.toFixed(2)}x</span>
                   </div>
                 </CardContent>
@@ -149,8 +149,8 @@ export default function StoreLayout() {
             {layoutSuggestions.length === 0 && (
               <div className="col-span-2 text-center py-12 text-muted-foreground">
                 <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No layout suggestions for this region</p>
-                <p className="text-xs mt-1">Insufficient correlation data available</p>
+                <p>Tidak ada saran tata letak untuk wilayah ini</p>
+                <p className="text-xs mt-1">Data korelasi tidak cukup tersedia</p>
               </div>
             )}
           </div>

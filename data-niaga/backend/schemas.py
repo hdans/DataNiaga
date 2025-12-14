@@ -40,6 +40,7 @@ class RecommendationResponse(BaseModel):
     related_product: Optional[str]
     action: str
     priority: str
+    confidence: Optional[float] = 0.85  # Default 85% jika tidak tersedia
 
 
 class DashboardSummary(BaseModel):
@@ -56,3 +57,10 @@ class UploadResponse(BaseModel):
     status: str
     message: str
     records: int
+
+
+class TrainingMetadata(BaseModel):
+    """Schema untuk informasi pelatihan model."""
+    last_trained: Optional[datetime] = None
+    total_records_trained: int = 0
+    model_version: str = "LightGBM v4.0.0"

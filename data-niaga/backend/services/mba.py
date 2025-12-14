@@ -142,38 +142,60 @@ def run_all_mba(df: pd.DataFrame) -> List[Dict[str, Any]]:
     """
     Menjalankan MBA untuk semua pulau dengan Data Preprocessing terpusat.
     """
-    print("=== START MARKET BASKET ANALYSIS PIPELINE ===")
+    import traceback
     
-    # 1. Global Cleaning
-    df_clean = clean_data_for_mba(df)
-    print(f"Total Transaksi Bersih: {len(df_clean)}")
-    
-    all_rules = []
-    islands = df_clean['PULAU'].unique()
-    
-    # Konfigurasi Threshold
-    # Diset agak longgar agar dapat hasil dulu, nanti bisa difilter di dashboard
-    MIN_SUPPORT = 0.1  # 10% Support (Sesuaikan dengan volume data)
-    MIN_LIFT = 2.0
-    
-    for pulau in islands:
-        rules = run_market_basket_analysis(
-            df_clean, 
-            pulau, 
-            min_support=MIN_SUPPORT, 
-            min_lift=MIN_LIFT
-        )
-        all_rules.extend(rules)
-    
-    # Global Summary
-    if all_rules:
-        df_res = pd.DataFrame(all_rules)
-        print("\n=== TOP 10 RULES TERKUAT (GLOBAL) ===")
-        print(df_res[['pulau', 'antecedents', 'consequents', 'confidence', 'lift']]
-              .sort_values(by='lift', ascending=False)
-              .head(10)
-              .to_string(index=False))
-    else:
-        print("\n❌ Tidak ada rules ditemukan sama sekali.")
+    try:
+        print("=== START MARKET BASKET ANALYSIS PIPELINE ===")
         
-    return all_rules
+        # 1. Global Cleaning
+        try:
+            df_clean = clean_data_for_mba(df)
+            print(f"Total Transaksi Bersih: {len(df_clean)}")
+        except Exception as e:
+            print(f"❌ Error during data cleaning: {str(e)}")
+            print(traceback.format_exc())
+            raise
+        
+        all_rules = []
+        islands = df_clean['PULAU'].unique()
+        print(f"Processing {len(islands)} islands: {list(islands)}")
+        
+        # Konfigurasi Threshold
+        # Diset agak longgar agar dapat hasil dulu, nanti bisa difilter di dashboard
+        MIN_SUPPORT = 0.1  # 10% Support (Sesuaikan dengan volume data)
+        MIN_LIFT = 2.0
+        
+        for pulau in islands:
+            try:
+                print(f"\nProcessing pulau: {pulau}")
+                rules = run_market_basket_analysis(
+                    df_clean, 
+                    pulau, 
+                    min_support=MIN_SUPPORT, 
+                    min_lift=MIN_LIFT
+                )
+                print(f"  ✓ Generated {len(rules)} rules for {pulau}")
+                all_rules.extend(rules)
+            except Exception as e:
+                print(f"❌ Error processing island {pulau}: {str(e)}")
+                print(traceback.format_exc())
+                raise
+        
+        # Global Summary
+        if all_rules:
+            df_res = pd.DataFrame(all_rules)
+            print("\n=== TOP 10 RULES TERKUAT (GLOBAL) ===")
+            print(df_res[['pulau', 'antecedents', 'consequents', 'confidence', 'lift']]
+                  .sort_values(by='lift', ascending=False)
+                  .head(10)
+                  .to_string(index=False))
+            print(f"\n✓ MBA Pipeline complete: {len(all_rules)} total rules generated")
+        else:
+            print("\n⚠️ Warning: No rules generated from any island")
+            
+        return all_rules
+        
+    except Exception as e:
+        print(f"\n❌ FATAL ERROR in run_all_mba: {str(e)}")
+        print(traceback.format_exc())
+        raise

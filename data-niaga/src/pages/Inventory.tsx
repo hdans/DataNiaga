@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, Minus, Package, ArrowRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, toTitleCase } from '@/lib/utils';
 
 interface InventoryItem {
   category: ProductCategory;
@@ -56,10 +56,22 @@ export default function Inventory() {
         nextWeekForecast: 0,
         trend: 'stable',
         trendPercent: 0,
-        derivedDemand: (mbaRules || [])
-          .filter((r: any) => (Array.isArray(r.consequents) ? r.consequents.includes(category) : r.consequents === category))
-          .map((r: any) => (Array.isArray(r.antecedents) ? r.antecedents[0] : r.antecedent || ''))
-          .filter(Boolean),
+        derivedDemand: Array.from(new Set(
+          (mbaRules || [])
+            .filter((r: any) => {
+              const antecedent = Array.isArray(r.antecedents) ? r.antecedents.join(',') : (r.antecedents || '');
+              const consequent = Array.isArray(r.consequents) ? r.consequents.join(',') : (r.consequents || '');
+              // Show products bought together (in either direction)
+              return antecedent.includes(category) || consequent.includes(category);
+            })
+            .flatMap((r: any) => {
+              const antecedent = Array.isArray(r.antecedents) ? r.antecedents[0] : (r.antecedents || '');
+              const consequent = Array.isArray(r.consequents) ? r.consequents[0] : (r.consequents || '');
+              // Return the OTHER product in the relationship
+              return antecedent === category ? consequent : antecedent;
+            })
+            .filter((p: string) => p && p !== category)
+        )),
       };
     });
   }, [topProducts, mbaRules]);
@@ -78,9 +90,9 @@ export default function Inventory() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Smart Inventory</h1>
+            <h1 className="text-2xl font-bold text-foreground">Inventori Cerdas</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Derived demand analysis based on forecasts + MBA associations
+              Analisis permintaan turunan berdasarkan prakiraan + asosiasi MBA
             </p>
           </div>
           <IslandSelector selected={selectedIsland} onChange={setSelectedIsland} />
@@ -92,12 +104,12 @@ export default function Inventory() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-success flex items-center gap-2">
                 <TrendingUp className="w-4 h-4" />
-                Demand Spike Alert
+                Peringatan Lonjakan Permintaan
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold text-foreground">{spikingItems.length}</p>
-              <p className="text-xs text-muted-foreground">Categories with rising demand</p>
+              <p className="text-xs text-muted-foreground">Kategori dengan permintaan naik</p>
             </CardContent>
           </Card>
 
@@ -105,12 +117,12 @@ export default function Inventory() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-destructive flex items-center gap-2">
                 <TrendingDown className="w-4 h-4" />
-                Declining Demand
+                Permintaan Menurun
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold text-foreground">{decliningItems.length}</p>
-              <p className="text-xs text-muted-foreground">Categories with falling demand</p>
+              <p className="text-xs text-muted-foreground">Kategori dengan permintaan turun</p>
             </CardContent>
           </Card>
         </div>
@@ -120,18 +132,18 @@ export default function Inventory() {
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <Package className="w-5 h-5" />
-              Inventory Planning Table
+              Tabel Perencanaan Inventori
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Category</TableHead>
-                  <TableHead className="text-right">This Week</TableHead>
-                  <TableHead className="text-right">Next Week</TableHead>
-                  <TableHead className="text-center">Trend</TableHead>
-                  <TableHead>Derived Demand (Stock These Too)</TableHead>
+                  <TableHead>Kategori</TableHead>
+                  <TableHead className="text-right">Minggu Ini</TableHead>
+                  <TableHead className="text-right">Minggu Depan</TableHead>
+                  <TableHead className="text-center">Tren</TableHead>
+                  <TableHead>Status Stok</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -183,7 +195,7 @@ function ProductInventoryRow({ island, item, onMetricsUpdate }: { island: string
     <TableRow key={item.category}>
       <TableCell>
         <Badge variant="outline" className="font-medium">
-          {item.category}
+          {toTitleCase(item.category)}
         </Badge>
       </TableCell>
       <TableCell className="text-right font-mono">
@@ -208,19 +220,46 @@ function ProductInventoryRow({ island, item, onMetricsUpdate }: { island: string
         </div>
       </TableCell>
       <TableCell>
-        {item.derivedDemand.length > 0 ? (
-          <div className="flex items-center gap-1 flex-wrap">
-            <ArrowRight className="w-3 h-3 text-muted-foreground" />
-            {item.derivedDemand.map((d) => (
-              <Badge key={d} variant="secondary" className="text-[10px]">
-                {d}
-              </Badge>
-            ))}
-          </div>
-        ) : (
-          <span className="text-xs text-muted-foreground">-</span>
-        )}
+        <StockHealthBadge current={currentVal} next={nextVal} />
       </TableCell>
     </TableRow>
+  );
+}
+
+// Stock Health Badge Component
+function StockHealthBadge({ current, next }: { current: number; next: number }) {
+  // Calculate average and determine health status
+  const avg = current > 0 ? current : 1;
+  const ratio = next / avg;
+  
+  let status: 'aman' | 'kurang' | 'berlebih';
+  let color: string;
+  
+  // Berlebih: forecast > 130% of current
+  if (ratio > 1.3) {
+    status = 'berlebih';
+    color = 'bg-orange-100 text-orange-800 border-orange-300';
+  }
+  // Kurang: forecast < 70% of current  
+  else if (ratio < 0.7) {
+    status = 'kurang';
+    color = 'bg-red-100 text-red-800 border-red-300';
+  }
+  // Aman: between 70% - 130%
+  else {
+    status = 'aman';
+    color = 'bg-green-100 text-green-800 border-green-300';
+  }
+  
+  const statusLabel = {
+    aman: 'Aman',
+    kurang: 'Kurang',
+    berlebih: 'Berlebih'
+  }[status];
+  
+  return (
+    <Badge className={cn('font-medium', color)} variant="outline">
+      {statusLabel}
+    </Badge>
   );
 }

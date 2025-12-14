@@ -210,7 +210,7 @@ export default function Setup() {
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <BarChart3 className="w-5 h-5 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-foreground">DataNiaga Setup</span>
+            <span className="font-semibold text-foreground">Setup DataNiaga</span>
           </div>
         </div>
       </header>
@@ -239,35 +239,35 @@ export default function Setup() {
         {step === 1 && (
           <Card>
             <CardHeader>
-              <CardTitle>Tell Us About You</CardTitle>
+              <CardTitle>Ceritakan Tentang Anda</CardTitle>
               <CardDescription>
-                This information helps personalize your dashboard experience.
+                Informasi ini membantu mempersonalisasi pengalaman dashboard Anda.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">Nama Lengkap</Label>
                 <Input
                   id="name"
-                  placeholder="Enter your name"
+                  placeholder="Masukkan nama Anda"
                   value={userInfo.name}
                   onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="role">Role</Label>
+                <Label htmlFor="role">Peran</Label>
                 <Input
                   id="role"
-                  placeholder="e.g., Store Manager, Analyst"
+                  placeholder="Misalnya, Manajer Toko, Analis"
                   value={userInfo.role}
                   onChange={(e) => setUserInfo({ ...userInfo, role: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="company">Company Name</Label>
+                <Label htmlFor="company">Nama Perusahaan</Label>
                 <Input
                   id="company"
-                  placeholder="Enter your company name"
+                  placeholder="Masukkan nama perusahaan Anda"
                   value={userInfo.company}
                   onChange={(e) => setUserInfo({ ...userInfo, company: e.target.value })}
                 />
@@ -278,7 +278,7 @@ export default function Setup() {
                   disabled={!canProceedStep1}
                   onClick={() => setStep(2)}
                 >
-                  Continue
+                  Lanjutkan
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </div>
@@ -290,9 +290,9 @@ export default function Setup() {
         {step === 2 && processingStep === 'idle' && (
           <Card>
             <CardHeader>
-              <CardTitle>Upload Transaction Data</CardTitle>
+              <CardTitle>Unggah Data Transaksi</CardTitle>
               <CardDescription>
-                Upload your sales data file to begin analysis.
+                Unggah file data penjualan Anda untuk memulai analisis.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -300,7 +300,7 @@ export default function Setup() {
               <Alert>
                 <FileSpreadsheet className="w-4 h-4" />
                 <AlertDescription>
-                  <span className="font-medium">Required Columns:</span>
+                  <span className="font-medium">Kolom yang Diperlukan:</span>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {REQUIRED_COLUMNS.map((col) => (
                       <span key={col} className="px-2 py-1 bg-muted rounded text-xs font-mono">
@@ -327,10 +327,10 @@ export default function Setup() {
                   <>
                     <Upload className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                     <p className="text-foreground font-medium mb-1">
-                      Drag & drop your file here
+                      Seret & lepas file Anda di sini
                     </p>
                     <p className="text-sm text-muted-foreground mb-4">
-                      or click to browse
+                      atau klik untuk telusuri
                     </p>
                     <Input
                       type="file"
@@ -341,11 +341,11 @@ export default function Setup() {
                     />
                     <Label htmlFor="file-upload">
                       <Button variant="outline" asChild>
-                        <span>Browse Files</span>
+                        <span>Telusuri File</span>
                       </Button>
                     </Label>
                     <p className="text-xs text-muted-foreground mt-4">
-                      Supports CSV and Excel files (.csv, .xlsx, .xls)
+                      Mendukung file CSV dan Excel (.csv, .xlsx, .xls)
                     </p>
                   </>
                 ) : (
@@ -379,14 +379,14 @@ export default function Setup() {
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setStep(1)}>
                   <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back
+                  Kembali
                 </Button>
                 <Button 
                   className="flex-1 gap-2" 
                   disabled={!canProceedStep2}
                   onClick={handleProcessData}
                 >
-                  Process Data
+                  Proses Data
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </div>
@@ -410,8 +410,8 @@ export default function Setup() {
                   </h3>
                   <p className="text-sm text-muted-foreground">
                     {processingStep !== 'complete' 
-                      ? 'Please wait while we analyze your data...'
-                      : 'Redirecting to your dashboard...'}
+                      ? 'Silakan tunggu sambil kami menganalisis data Anda...'
+                      : 'Pengalihan ke dashboard Anda...'}
                   </p>
                 </div>
                 <div className="max-w-xs mx-auto">

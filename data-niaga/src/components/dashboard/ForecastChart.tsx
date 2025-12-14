@@ -3,6 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import React, { useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
 import { useForecast } from '@/hooks/useApi';
+import { toTitleCase } from '@/lib/utils';
 import {
   ResponsiveContainer,
   LineChart,
@@ -99,7 +100,7 @@ export function ForecastChart({ island, category, showLast = 8 }: ForecastChartP
       <Card className="h-64 cursor-pointer min-w-0 overflow-visible" onClick={() => setOpen(true)}>
         <CardHeader>
           <div className="flex items-center justify-between">
-            <CardTitle className="text-sm">{category}</CardTitle>
+            <CardTitle className="text-sm">{toTitleCase(category)}</CardTitle>
             <Badge variant={isDecline ? 'destructive' : 'secondary'}>
               {isDecline ? (
                 '↓ Decline'

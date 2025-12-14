@@ -65,6 +65,15 @@ export function useProducts(pulau?: string) {
   });
 }
 
+// Training Metadata Hook
+export function useTrainingMetadata() {
+  return useQuery({
+    queryKey: ['trainingMetadata'],
+    queryFn: () => api.getTrainingMetadata(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 // Upload Data Mutation
 export function useUploadData() {
   const queryClient = useQueryClient();

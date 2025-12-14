@@ -23,6 +23,20 @@ export interface ForecastData {
   is_forecast: boolean;
 }
 
+export interface ModelMetric {
+  pulau: string;
+  product_category: string;
+  mae: number;
+  mape: number;
+  sample_size?: number;
+}
+
+export interface TrainingMetadata {
+  last_trained: string | null;
+  total_records_trained: number;
+  model_version: string;
+}
+
 export interface MBARule {
   antecedents: string;
   consequents: string;
@@ -88,14 +102,27 @@ export const api = {
   },
 
   // Get forecast data
-  async getForecast(pulau?: string, product?: string): Promise<ForecastData[]> {
+  async getForecast(
+    pulau?: string,
+    product?: string
+  ): Promise<{ forecast_data: ForecastData[]; model_metrics: ModelMetric[] }> {
     const params = new URLSearchParams();
     if (pulau) params.append('pulau', pulau);
     if (product) params.append('product', product);
 
     const url = `${API_BASE_URL}/api/forecast${params.toString() ? '?' + params.toString() : ''}`;
     const response = await fetch(url);
-    return handleResponse(response);
+    const payload = await handleResponse<any>(response);
+
+    // Normalize to the new shape the backend returns
+    if (Array.isArray(payload)) {
+      return { forecast_data: payload as ForecastData[], model_metrics: [] };
+    }
+
+    return {
+      forecast_data: payload?.forecast_data ?? [],
+      model_metrics: payload?.model_metrics ?? [],
+    };
   },
 
   // Get MBA rules
@@ -130,6 +157,12 @@ export const api = {
       ? `${API_BASE_URL}/api/products?pulau=${encodeURIComponent(pulau)}`
       : `${API_BASE_URL}/api/products`;
     const response = await fetch(url);
+    return handleResponse(response);
+  },
+
+  // Get training metadata
+  async getTrainingMetadata(): Promise<TrainingMetadata> {
+    const response = await fetch(`${API_BASE_URL}/api/training-metadata`);
     return handleResponse(response);
   },
 };

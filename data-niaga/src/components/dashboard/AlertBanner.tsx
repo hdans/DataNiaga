@@ -45,11 +45,20 @@ export function AlertBanner({ island }: AlertBannerProps) {
     if (recommendations && recommendations.length > 0) {
       // Map top 3 recommendations to alerts
       recommendations.slice(0, 3).forEach((r: any, idx: number) => {
+        const titleMap: Record<string, string> = {
+          'derived_demand': 'Permintaan Turunan',
+          'dead_stock': 'Bersihkan Stok Lambat',
+          'stockup': 'Tambah Stok',
+          'bundling': 'Peluang Bundel',
+          'promo': 'Saran Promosi',
+          'layout': 'Tata Letak Toko',
+        };
+        
         next.push({
           id: `rec-${idx}`,
           type: r.type === 'derived_demand' ? 'warning' : 'info',
-          title: r.type === 'derived_demand' ? 'Derived Demand' : 'Recommendation',
-          message: r.action || `${r.product} -> ${r.related_product || ''}`,
+          title: titleMap[r.type] || 'Rekomendasi',
+          message: r.action || `${r.product} → ${r.related_product || ''}`,
         });
       });
     }
@@ -60,8 +69,8 @@ export function AlertBanner({ island }: AlertBannerProps) {
         next.unshift({
           id: 'stockout-risk',
           type: 'warning',
-          title: 'Stockout Risk',
-          message: `${summary.stockout_risks} items at risk of stockout. Review replenishment plans.`,
+          title: 'Risiko Kehabisan Stok',
+          message: `${summary.stockout_risks} item berisiko kehabisan stok. Tinjau rencana pengisian ulang.`,
         });
       }
 
@@ -69,8 +78,8 @@ export function AlertBanner({ island }: AlertBannerProps) {
         next.push({
           id: 'opps',
           type: 'success',
-          title: 'Opportunities Detected',
-          message: `${summary.opportunities} bundling/promo opportunities identified.`,
+          title: 'Peluang Terdeteksi',
+          message: `${summary.opportunities} peluang bundling/promo teridentifikasi.`,
         });
       }
     }
@@ -80,8 +89,8 @@ export function AlertBanner({ island }: AlertBannerProps) {
       next.push({
         id: 'static-1',
         type: 'info',
-        title: 'No immediate alerts',
-        message: 'No alerts detected. Upload a dataset to generate forecasts and recommendations.',
+        title: 'Tidak ada peringatan segera',
+        message: 'Tidak ada peringatan terdeteksi. Unggah dataset untuk menghasilkan prakiraan dan rekomendasi.',
       });
     }
 

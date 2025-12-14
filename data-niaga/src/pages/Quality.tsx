@@ -13,7 +13,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Target, CheckCircle2, AlertCircle, XCircle, Star } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, toTitleCase } from '@/lib/utils';
 import {
   PieChart,
   Pie,
@@ -69,9 +69,22 @@ const getQualityColor = (qualityName: string): string => {
 };
 
 export default function Quality() {
-  const { data: products = [] } = useProducts();
   const { data: islands = [] } = useIslands();
-  const [selectedIsland, setSelectedIsland] = React.useState<string>(islands[0] ?? 'JAWA, BALI, & NT');
+  const [selectedIsland, setSelectedIsland] = React.useState<string>('');
+  const activeIsland = selectedIsland || islands[0] || '';
+
+  // Fetch products and forecasts scoped to the selected island to keep the page aligned with backend data
+  const { data: products = [] } = useProducts(activeIsland);
+  const { data: forecastResponse, isLoading: forecastLoading } = useForecast(activeIsland) as any;
+  const forecastRows = (forecastResponse && forecastResponse.forecast_data) ? forecastResponse.forecast_data : (forecastResponse || []);
+  const forecastMetrics = (forecastResponse && forecastResponse.model_metrics) ? forecastResponse.model_metrics : [];
+
+  // Initialize selected island once the backend list arrives
+  React.useEffect(() => {
+    if (islands.length && !selectedIsland) {
+      setSelectedIsland(islands[0]);
+    }
+  }, [islands, selectedIsland]);
 
   const [metricsMap, setMetricsMap] = React.useState<Record<string, { mae: number; mape: number; quality: string }>>({});
 
@@ -103,7 +116,7 @@ export default function Quality() {
           </div>
           <div className="ml-auto">
             <IslandSelector
-              selected={selectedIsland}
+              selected={activeIsland}
               onChange={(val) => {
                 setSelectedIsland(val);
                 setMetricsMap({}); // reset metrics when region changes
@@ -258,8 +271,11 @@ export default function Quality() {
                 {(products || []).slice(0, 24).map((product) => (
                   <ProductQualityRow
                     key={product}
-                    island={selectedIsland}
+                    island={activeIsland}
                     product={product}
+                    rows={forecastRows}
+                    metrics={forecastMetrics}
+                    isLoading={forecastLoading}
                     onMetric={(m) => updateMetric(product, m)}
                   />
                 ))}
@@ -284,21 +300,30 @@ function mapMapeToQuality(mape: number) {
   return 'Inaccurate';
 }
 
-function ProductQualityRow({ island, product, onMetric }: { island: string; product: string; onMetric: (m: { mae: number; mape: number; quality: string }) => void }) {
-  const { data, isLoading } = useForecast(island, product) as any;
-  const rows = (data && data.forecast_data) ? data.forecast_data : (data || []);
-  const metrics = (data && data.model_metrics) ? data.model_metrics : [];
-
-  // Local state to display values
+function ProductQualityRow({ island, product, rows, metrics, isLoading, onMetric }: { island: string; product: string; rows: any[]; metrics: any[]; isLoading: boolean; onMetric: (m: { mae: number; mape: number; quality: string }) => void }) {
   const [maeDisplay, setMaeDisplay] = React.useState<number | string>(isLoading ? '—' : '-');
   const [mapeDisplay, setMapeDisplay] = React.useState<number | string>(isLoading ? '—' : '-');
   const [qualityDisplay, setQualityDisplay] = React.useState<string>(isLoading ? 'Loading…' : '-');
 
   React.useEffect(() => {
-    // Try to find a matching metric from the backend first
+    if (isLoading) {
+      setMaeDisplay('—');
+      setMapeDisplay('—');
+      setQualityDisplay('Loading…');
+      return;
+    }
+
     const normalize = (s: any) => (s || '').toString().toLowerCase().trim();
     const cat = normalize(product);
     const isl = normalize(island);
+
+    const productRows = Array.isArray(rows)
+      ? rows.filter((r: any) => {
+          const rp = normalize(r.product_category || r.product);
+          const pul = normalize(r.pulau || r.region);
+          return (rp === cat && pul === isl) || rp === cat || rp.includes(cat) || cat.includes(rp);
+        })
+      : [];
 
     let matched: any = undefined;
     if (Array.isArray(metrics) && metrics.length) {
@@ -320,28 +345,26 @@ function ProductQualityRow({ island, product, onMetric }: { island: string; prod
       return;
     }
 
-    // Fallback: compute from historical rows
-    if (!rows || rows.length === 0) {
+    if (!productRows.length) {
       setMaeDisplay('-');
       setMapeDisplay('-');
-  setQualityDisplay('Inaccurate');
-  onMetric({ mae: 0, mape: 0, quality: 'Inaccurate' });
+      setQualityDisplay('Inaccurate');
+      onMetric({ mae: 0, mape: 0, quality: 'Inaccurate' });
       return;
     }
 
-    const historical = rows.filter((r: any) => !r.is_forecast && r.actual != null);
-    if (!historical || historical.length === 0) {
+    const historical = productRows.filter((r: any) => !r.is_forecast && r.actual != null);
+    if (!historical.length) {
       setMaeDisplay('-');
       setMapeDisplay('-');
-  setQualityDisplay('Inaccurate');
-  onMetric({ mae: 0, mape: 0, quality: 'Inaccurate' });
+      setQualityDisplay('Inaccurate');
+      onMetric({ mae: 0, mape: 0, quality: 'Inaccurate' });
       return;
     }
 
-    const errors = historical.map((h: any) => Math.abs(h.actual - h.predicted));
+    const errors = historical.map((h: any) => Math.abs((h.actual || 0) - (h.predicted || 0)));
     const maes = errors.reduce((a: number, b: number) => a + b, 0) / errors.length;
-    const mapes = historical
-      .map((h: any) => (h.actual > 0 ? Math.abs((h.actual - h.predicted) / h.actual) * 100 : 0));
+    const mapes = historical.map((h: any) => (h.actual && h.actual > 0 ? Math.abs((h.actual - (h.predicted || 0)) / h.actual) * 100 : 0));
     const mape = mapes.reduce((a: number, b: number) => a + b, 0) / mapes.length;
 
     setMaeDisplay(maes.toFixed(2));
@@ -349,14 +372,14 @@ function ProductQualityRow({ island, product, onMetric }: { island: string; prod
     const quality = mapMapeToQuality(mape);
     setQualityDisplay(quality);
     onMetric({ mae: maes, mape, quality });
-  }, [data, rows, metrics, isLoading, product, island]);
+  }, [rows, metrics, isLoading, product, island, onMetric]);
 
   return (
     <TableRow>
       <TableCell>
-        <Badge variant="outline">{product}</Badge>
+        <Badge variant="outline">{toTitleCase(product)}</Badge>
       </TableCell>
-      <TableCell className="text-sm text-muted-foreground">{island}</TableCell>
+      <TableCell className="text-sm text-muted-foreground">{toTitleCase(island)}</TableCell>
       <TableCell className="text-right font-mono text-sm">{isLoading ? '—' : maeDisplay}</TableCell>
       <TableCell className="text-right font-mono text-sm">{isLoading ? '—' : mapeDisplay}</TableCell>
       <TableCell>

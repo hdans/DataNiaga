@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { cn, toTitleCase } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { MapPin } from 'lucide-react';
 import { useIslands } from '@/hooks/useApi';
@@ -29,7 +29,7 @@ export function IslandSelector({ selected, onChange, className }: IslandSelector
             selected === island && 'shadow-glow'
           )}
         >
-          {island}
+          {toTitleCase(island)}
         </Button>
       ))}
     </div>

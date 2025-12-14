@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text
 from database import Base
+from datetime import datetime
 
 
 class Forecast(Base):
@@ -39,6 +40,7 @@ class Recommendation(Base):
     related_product = Column(String, nullable=True)
     action = Column(String)
     priority = Column(String)
+    confidence = Column(Float, default=0.85)  # confidence score (0-1)
 
 
 class UserSession(Base):

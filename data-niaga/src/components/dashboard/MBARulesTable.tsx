@@ -10,7 +10,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ArrowRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, toTitleCase } from '@/lib/utils';
 import { useMBARules } from '@/hooks/useApi';
 
 interface MBARulesTableProps {
@@ -33,17 +33,17 @@ export function MBARulesTable({ island, limit = 10 }: MBARulesTableProps) {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-base font-semibold">
-          Association Rules (MBA)
+          Aturan Asosiasi (MBA)
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="text-xs">If Customer Buys</TableHead>
+              <TableHead className="text-xs">Jika Pelanggan Membeli</TableHead>
               <TableHead className="text-xs"></TableHead>
-              <TableHead className="text-xs">They Also Buy</TableHead>
-              <TableHead className="text-xs text-right">Confidence</TableHead>
+              <TableHead className="text-xs">Mereka Juga Membeli</TableHead>
+              <TableHead className="text-xs text-right">Kepercayaan</TableHead>
               <TableHead className="text-xs text-right">Lift</TableHead>
             </TableRow>
           </TableHeader>
@@ -51,19 +51,19 @@ export function MBARulesTable({ island, limit = 10 }: MBARulesTableProps) {
             {isLoading ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-xs py-4">
-                  Loading rules...
+                  Memuat aturan...
                 </TableCell>
               </TableRow>
             ) : isError ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-xs py-4">
-                  Failed to load MBA rules
+                  Gagal memuat aturan MBA
                 </TableCell>
               </TableRow>
             ) : filteredRules.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-xs py-4">
-                  No rules available
+                  Tidak ada aturan yang tersedia
                 </TableCell>
               </TableRow>
             ) : (
@@ -82,7 +82,7 @@ export function MBARulesTable({ island, limit = 10 }: MBARulesTableProps) {
                   <TableRow key={rule.id ?? idx}>
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">
-                        {antecedent}
+                        {toTitleCase(antecedent)}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -90,7 +90,7 @@ export function MBARulesTable({ island, limit = 10 }: MBARulesTableProps) {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline" className="text-xs">
-                        {consequent}
+                        {toTitleCase(consequent)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right text-xs">

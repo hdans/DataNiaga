@@ -6,7 +6,7 @@ import { RecommendationCard } from '@/components/dashboard/RecommendationCard';
 import { IslandSelector } from '@/components/dashboard/IslandSelector';
 import { AlertBanner } from '@/components/dashboard/AlertBanner';
 import { MBARulesTable } from '@/components/dashboard/MBARulesTable';
-import { getDashboardMetrics, recommendations as mockRecommendations } from '@/lib/mockData';
+import { getDashboardMetrics } from '@/lib/mockData';
 import { TrendingUp, AlertTriangle, Package, Gift, Target, Loader2 } from 'lucide-react';
 import { useDashboardSummary, useRecommendations, useIslands, useProducts, useMBARules } from '@/hooks/useApi';
 import api from '@/lib/api';
@@ -79,20 +79,36 @@ export default function Dashboard() {
     }
   }, []);
 
-  // Use API recommendations or fallback to mock
+  // Use only API recommendations (no mock fallback)
   const filteredRecommendations = useMemo(() => {
-    if (apiRecommendations && apiRecommendations.length > 0) {
-      return apiRecommendations.map((r, idx) => ({
-        id: `api-${idx}`,
-        pulau: selectedIsland,
-        type: r.type as 'derived_demand' | 'dead_stock',
-        product: r.product,
-        relatedProduct: r.related_product,
-        action: r.action,
-        priority: r.priority as 'high' | 'medium' | 'low',
-      }));
-    }
-    return mockRecommendations.filter((r) => r.pulau === selectedIsland);
+    if (!apiRecommendations || apiRecommendations.length === 0) return [];
+
+    const priorityWeight: Record<'high' | 'medium' | 'low', number> = {
+      high: 3,
+      medium: 2,
+      low: 1,
+    };
+
+    const types: Array<'derived_demand' | 'dead_stock'> = ['derived_demand', 'dead_stock'];
+
+    const byType = types.flatMap((t) => {
+      return apiRecommendations
+        .filter((r) => r.type === t)
+        .sort((a, b) => priorityWeight[(b.priority as any) || 'low'] - priorityWeight[(a.priority as any) || 'low'])
+        .slice(0, 5) // top 5 per category
+        .map((r, idx) => ({
+          id: `api-${t}-${idx}`,
+          pulau: selectedIsland,
+          type: r.type as 'derived_demand' | 'dead_stock',
+          product: r.product,
+          relatedProduct: r.related_product,
+          action: r.action,
+          priority: r.priority as 'high' | 'medium' | 'low',
+          confidence: (r as any).confidence,
+        }));
+    });
+
+    return byType;
   }, [apiRecommendations, selectedIsland]);
 
   const topCategories = products.slice(0, 4);
@@ -192,10 +208,10 @@ export default function Dashboard() {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">
-              {userName ? `Welcome back, ${userName}` : 'Retail Decision Support System'}
+              {userName ? `Selamat datang, ${userName}` : 'Sistem Pendukung Keputusan Ritel'}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">
-              AI-powered forecasting and recommendations for retail operations
+              Prediksi dan rekomendasi berbasis AI untuk operasi ritel
             </p>
           </div>
           <IslandSelector selected={selectedIsland} onChange={setSelectedIsland} />
@@ -207,44 +223,44 @@ export default function Dashboard() {
         {/* Metrics Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             <MetricCard
-              title="Total Products"
+              title="Total Produk"
               value={summaryLoading ? '...' : String(metrics.totalProducts)}
-              subtitle="SKUs tracked"
+              subtitle="SKU terlacak"
               icon={<Loader2 className="w-5 h-5" />}
               variant="primary"
             />
           <MetricCard
-            title="Stockout Risks"
-            value={summaryLoading || computedLoading ? '...' : computedMetrics.stockoutRisks}
-            subtitle="Items at risk"
+            title="Risiko Kehabisan Stok"
+            value={summaryLoading ? '...' : (apiSummary?.stockout_risks ?? computedMetrics.stockoutRisks)}
+            subtitle="Item yang berisiko"
             icon={<AlertTriangle className="w-5 h-5" />}
             variant="danger"
           />
           <MetricCard
-            title="Bundle Opportunities"
-            value={summaryLoading || computedLoading ? '...' : computedMetrics.bundlingOpportunities}
-            subtitle="High-lift pairs"
+            title="Peluang Bundel"
+            value={summaryLoading ? '...' : (apiSummary?.opportunities ?? computedMetrics.bundlingOpportunities)}
+            subtitle="Pasangan dengan lift tinggi"
             icon={<Package className="w-5 h-5" />}
             variant="success"
           />
           <MetricCard
-            title="Promo Suggestions"
+            title="Saran Promosi"
             value={summaryLoading || computedLoading ? '...' : computedMetrics.promoSuggestions}
-            subtitle="Dead stock items"
+            subtitle="Item stok mati"
             icon={<Gift className="w-5 h-5" />}
             variant="warning"
           />
           <MetricCard
-            title="Model Accuracy"
+            title="Akurasi Model"
             value={summaryLoading || computedLoading ? '...' : `${computedMetrics.modelAccuracy}%`}
-            subtitle="Avg. MAPE score"
+            subtitle="Skor MAPE rata-rata"
             icon={<Target className="w-5 h-5" />}
             variant="default"
           />
         </div>
 
         <div className="text-xs text-muted-foreground mt-2">
-          Data source: {apiSummary ? 'Live API' : 'Mock data / no API response'}
+          Sumber data: {apiSummary ? 'API Langsung' : 'Data simulasi / tidak ada respons API'}
         </div>
 
         {/* Charts Row */}
@@ -264,7 +280,7 @@ export default function Dashboard() {
           {/* Recommendations */}
           <div>
             <h2 className="text-lg font-semibold text-foreground mb-4">
-              Smart Recommendations
+              Rekomendasi Cerdas
             </h2>
             <div className="space-y-3">
               {filteredRecommendations.length > 0 ? (
@@ -273,7 +289,7 @@ export default function Dashboard() {
                 ))
               ) : (
                 <div className="text-center py-8 text-muted-foreground text-sm">
-                  No recommendations for this region
+                  Tidak ada rekomendasi untuk wilayah ini
                 </div>
               )}
             </div>

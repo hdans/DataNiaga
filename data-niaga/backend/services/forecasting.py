@@ -225,23 +225,32 @@ def run_all_forecasts(df: pd.DataFrame) -> Dict[str, List[Any]]:
         'model_metrics': [...]  # Data untuk tabel akurasi
     }
     """
+    import traceback
     all_forecasts = []
     all_metrics = []
     
-    if not pd.api.types.is_datetime64_any_dtype(df['InvoiceDate']):
-        df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
+    try:
+        if not pd.api.types.is_datetime64_any_dtype(df['InvoiceDate']):
+            df['InvoiceDate'] = pd.to_datetime(df['InvoiceDate'])
+            
+        islands = df['PULAU'].unique()
+        print(f"Found {len(islands)} islands: {islands}")
         
-    islands = df['PULAU'].unique()
-    
-    for pulau in islands:
-        print(f"Training forecast model for: {pulau}")
-        try:
-            forecasts, metrics = train_forecast_model(df, pulau)
-            all_forecasts.extend(forecasts)
-            all_metrics.extend(metrics)
-            print(f"  Generated {len(forecasts)} records & metrics for {len(metrics)} categories")
-        except Exception as e:
-            print(f"  Error training {pulau}: {str(e)}")
+        for pulau in islands:
+            print(f"Training forecast model for: {pulau}")
+            try:
+                forecasts, metrics = train_forecast_model(df, pulau)
+                all_forecasts.extend(forecasts)
+                all_metrics.extend(metrics)
+                print(f"  Generated {len(forecasts)} records & {len(metrics)} metrics")
+            except Exception as e:
+                print(f"  Error training {pulau}: {str(e)}")
+                print(f"  Traceback: {traceback.format_exc()}")
+                raise
+    except Exception as e:
+        print(f"Critical error in run_all_forecasts: {str(e)}")
+        print(f"Traceback: {traceback.format_exc()}")
+        raise
     
     return {
         "forecast_data": all_forecasts,

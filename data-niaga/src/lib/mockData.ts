@@ -162,10 +162,10 @@ export const recommendations: Recommendation[] = [
     pulau: 'JAWA, BALI, & NT',
     type: 'stockup',
     priority: 'high',
-    title: 'Stock Up: KOSMETIK',
-    description: 'Forecast predicts 35% increase in demand next 4 weeks. Prepare additional inventory.',
+    title: 'Tambah Stok: Kosmetik',
+    description: 'Prakiraan memprediksi peningkatan permintaan 35% dalam 4 minggu berikutnya. Siapkan inventori tambahan.',
     anchorProduct: 'KOSMETIK',
-    expectedImpact: '+35% revenue opportunity',
+    expectedImpact: '+35% peluang pendapatan',
     confidence: 0.85
   },
   {
@@ -173,11 +173,11 @@ export const recommendations: Recommendation[] = [
     pulau: 'JAWA, BALI, & NT',
     type: 'bundling',
     priority: 'high',
-    title: 'Bundle Opportunity',
-    description: 'KOSMETIK buyers frequently purchase SKINCARE (72% confidence). Create combo deals.',
+    title: 'Peluang Bundel',
+    description: 'Pembeli Kosmetik sering membeli Skincare (72% kepercayaan). Buat penawaran combo.',
     anchorProduct: 'KOSMETIK',
     targetProduct: 'SKINCARE',
-    expectedImpact: '+23% basket size',
+    expectedImpact: '+23% ukuran keranjang',
     confidence: 0.72
   },
   {
@@ -185,11 +185,11 @@ export const recommendations: Recommendation[] = [
     pulau: 'KALIMANTAN & SULAWESI',
     type: 'promo',
     priority: 'medium',
-    title: 'Clear Slow Stock: ELEKTRONIK',
-    description: 'Low forecast for ELEKTRONIK. Bundle with HOUSEHOLD at 20% discount to clear inventory.',
+    title: 'Bersihkan Stok Lambat: Elektronik',
+    description: 'Prakiraan rendah untuk Elektronik. Bundel dengan Household dengan diskon 20% untuk membersihkan inventori.',
     anchorProduct: 'ELEKTRONIK',
     targetProduct: 'HOUSEHOLD',
-    expectedImpact: 'Reduce dead stock by 40%',
+    expectedImpact: 'Kurangi stok mati sebesar 40%',
     confidence: 0.68
   },
   {
@@ -197,11 +197,11 @@ export const recommendations: Recommendation[] = [
     pulau: 'SUMATERA & RIAU',
     type: 'layout',
     priority: 'medium',
-    title: 'Store Layout: MINUMAN & MAKANAN',
-    description: 'Place MINUMAN adjacent to MAKANAN section. High cross-purchase rate (lift: 3.89x).',
+    title: 'Tata Letak Toko: Minuman & Makanan',
+    description: 'Tempatkan Minuman bersebelahan dengan bagian Makanan. Tingkat cross-purchase tinggi (lift: 3.89x).',
     anchorProduct: 'MINUMAN',
     targetProduct: 'MAKANAN',
-    expectedImpact: '+18% cross-sell rate',
+    expectedImpact: '+18% tingkat cross-sell',
     confidence: 0.71
   },
   {
@@ -209,10 +209,10 @@ export const recommendations: Recommendation[] = [
     pulau: 'JAWA, BALI, & NT',
     type: 'stockup',
     priority: 'medium',
-    title: 'Derived Demand: SKINCARE',
-    description: 'As KOSMETIK sales rise, prepare SKINCARE inventory (72% correlation).',
+    title: 'Permintaan Turunan: Skincare',
+    description: 'Seiring penjualan Kosmetik meningkat, siapkan inventori Skincare (72% korelasi).',
     anchorProduct: 'SKINCARE',
-    expectedImpact: '+28% derived sales',
+    expectedImpact: '+28% penjualan turunan',
     confidence: 0.72
   },
 ];

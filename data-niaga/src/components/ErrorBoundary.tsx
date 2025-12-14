@@ -26,8 +26,8 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren<{}>, 
       return (
         <div className="min-h-screen flex items-center justify-center p-6 bg-background">
           <div className="max-w-lg w-full bg-card border border-border rounded-lg p-6 text-center">
-            <h2 className="text-xl font-semibold mb-2">Something went wrong</h2>
-            <p className="text-sm text-muted-foreground mb-4">An unexpected error occurred while rendering the application.</p>
+            <h2 className="text-xl font-semibold mb-2">Terjadi kesalahan</h2>
+            <p className="text-sm text-muted-foreground mb-4">Terjadi kesalahan yang tidak terduga saat merender aplikasi.</p>
             <details className="text-xs text-muted-foreground text-left whitespace-pre-wrap mb-4">
               {this.state.error?.stack || this.state.error?.message}
             </details>
@@ -36,7 +36,7 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren<{}>, 
                 className="px-4 py-2 rounded bg-primary text-primary-foreground"
                 onClick={() => window.location.reload()}
               >
-                Reload
+                Muat Ulang
               </button>
             </div>
           </div>

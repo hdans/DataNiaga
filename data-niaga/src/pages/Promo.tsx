@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Gift, TrendingDown, Package, Sparkles, Calendar, Percent } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, toTitleCase } from '@/lib/utils';
 
 interface PromoSuggestion {
   slowProduct: ProductCategory;
@@ -62,13 +62,15 @@ export default function Promo() {
           });
 
           if (rule) {
+            const anchor = Array.isArray(rule.antecedents) ? rule.antecedents[0] : rule.antecedents || '';
+
             suggestions.push({
               slowProduct: product as ProductCategory,
               forecastQty: nextVal,
-              anchorProduct: Array.isArray(rule.antecedents) ? rule.antecedents[0] : rule.antecedents || '',
+              anchorProduct: anchor,
               lift: rule.lift || 0,
               suggestedDiscount: Math.min(30, Math.round((1 - Math.min(1, Math.max(0, nextVal / Math.max(1, currentVal)))) * 30 + 10)),
-              reason: `Bundle with ${Array.isArray(rule.antecedents) ? rule.antecedents[0] : rule.antecedents} — predicted drop ${Math.abs(changePct).toFixed(0)}%`,
+              reason: `Bundle dengan ${toTitleCase(anchor)} — prediksi penurunan ${Math.abs(changePct).toFixed(0)}%`,
             });
           }
         }
@@ -96,9 +98,9 @@ export default function Promo() {
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Promo Planner</h1>
+            <h1 className="text-2xl font-bold text-foreground">Perencana Promosi</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Dead stock clearance and promotional timing suggestions
+              Saran pembersihan stok mati dan waktu promosi
             </p>
           </div>
           <IslandSelector selected={selectedIsland} onChange={setSelectedIsland} />
@@ -110,17 +112,17 @@ export default function Promo() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-warning flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
-                Suggested Promo Weeks
+                Minggu Promosi yang Disarankan
               </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-xs text-muted-foreground mb-3">
-                These weeks show lower-than-average predicted sales. Consider running promotions:
+                Minggu-minggu ini menunjukkan penjualan yang diprediksi lebih rendah dari rata-rata. Pertimbangkan menjalankan promosi:
               </p>
               <div className="flex gap-2 flex-wrap">
                 {weakWeeks.map((w) => (
                   <Badge key={w.week} variant="outline" className="bg-warning/10 border-warning/30">
-                    Week {w.week} ({new Date(w.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})
+                    Minggu {w.week} ({new Date(w.date).toLocaleDateString('id-ID', { month: 'short', day: 'numeric' })})
                   </Badge>
                 ))}
               </div>
@@ -132,7 +134,7 @@ export default function Promo() {
         <div>
           <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
             <Gift className="w-5 h-5 text-primary" />
-            Bundle & Discount Suggestions
+            Saran Bundel & Diskon
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -146,10 +148,10 @@ export default function Promo() {
                       </div>
                       <div>
                         <h3 className="font-semibold text-foreground text-sm">
-                          {suggestion.slowProduct}
+                          {toTitleCase(suggestion.slowProduct)}
                         </h3>
                         <p className="text-xs text-muted-foreground">
-                          Avg forecast: {suggestion.forecastQty} units/week
+                          Prakiraan rata-rata: {suggestion.forecastQty} unit/minggu
                         </p>
                       </div>
                     </div>
@@ -162,19 +164,19 @@ export default function Promo() {
                   <div className="bg-muted/50 rounded-lg p-3 mb-3">
                     <div className="flex items-center gap-2 text-sm">
                       <Package className="w-4 h-4 text-primary" />
-                      <span className="text-muted-foreground">Bundle with:</span>
-                      <Badge variant="secondary">{suggestion.anchorProduct}</Badge>
+                      <span className="text-muted-foreground">Bundle dengan:</span>
+                      <Badge variant="secondary">{toTitleCase(suggestion.anchorProduct)}</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
                       <Sparkles className="w-3 h-3" />
-                      {suggestion.lift.toFixed(1)}x purchase correlation
+                      {suggestion.lift.toFixed(1)}x korelasi pembelian
                     </p>
                   </div>
 
                   <p className="text-xs text-muted-foreground">{suggestion.reason}</p>
 
                   <Button variant="outline" size="sm" className="w-full mt-4">
-                    Create Promo Campaign
+                    Buat Kampanye Promosi
                   </Button>
                 </CardContent>
               </Card>
@@ -183,8 +185,8 @@ export default function Promo() {
             {promoSuggestions.length === 0 && (
               <div className="col-span-2 text-center py-12 text-muted-foreground">
                 <Gift className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No promo suggestions for this region</p>
-                <p className="text-xs mt-1">All products have healthy demand forecasts</p>
+                <p>Tidak ada saran promosi untuk wilayah ini</p>
+                <p className="text-xs mt-1">Semua produk memiliki prakiraan permintaan yang sehat</p>
               </div>
             )}
           </div>
