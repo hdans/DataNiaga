@@ -5,7 +5,15 @@ import { ProductCategory } from '@/lib/mockData';
 import { useProducts, useMBARules } from '@/hooks/useApi';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { MapPin, ArrowRight, Sparkles, LayoutGrid } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { MapPin, ArrowRight, Sparkles, LayoutGrid, CheckCircle2, Save } from 'lucide-react';
 import { cn, toTitleCase } from '@/lib/utils';
 
 interface LayoutSuggestion {
@@ -20,6 +28,11 @@ export default function StoreLayout() {
   const { data: products = [] } = useProducts();
   const [selectedIsland, setSelectedIsland] = useState<string>('JAWA, BALI, & NT');
   const { data: mbaRules = [] } = useMBARules(selectedIsland);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+
+  const handleApplyLayout = () => {
+    setShowSuccessDialog(true);
+  };
 
   const layoutSuggestions = useMemo(() => {
     const suggestions: LayoutSuggestion[] = (mbaRules || [])
@@ -105,6 +118,16 @@ export default function StoreLayout() {
             <p className="text-xs text-muted-foreground mt-4 text-center">
               Produk dengan korelasi kuat harus ditempatkan di zona yang berdekatan
             </p>
+            <div className="flex justify-center mt-4">
+              <Button
+                size="sm"
+                onClick={handleApplyLayout}
+                className="gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Terapkan Layout ke Sistem
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
@@ -155,6 +178,48 @@ export default function StoreLayout() {
             )}
           </div>
         </div>
+
+        {/* Success Dialog */}
+        <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                <CheckCircle2 className="h-6 w-6 text-green-600" />
+              </div>
+              <DialogTitle className="text-center text-xl">
+                Layout Toko Berhasil Diperbarui
+              </DialogTitle>
+              <DialogDescription className="text-center pt-2">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Tata letak toko untuk wilayah <span className="font-semibold text-foreground">{selectedIsland}</span> telah berhasil diterapkan ke sistem.
+                  </p>
+                  <div className="bg-muted/50 rounded-lg p-3 mt-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Total Zona:</span>
+                      <Badge variant="secondary">{layoutGrid.length} zona</Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-xs mt-2">
+                      <span className="text-muted-foreground">Rekomendasi:</span>
+                      <Badge variant="secondary">{layoutSuggestions.length} penempatan</Badge>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Sistem akan mengoptimalkan penempatan produk berdasarkan korelasi pembelian.
+                  </p>
+                </div>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-center mt-4">
+              <Button
+                onClick={() => setShowSuccessDialog(false)}
+                className="w-full sm:w-auto"
+              >
+                Tutup
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

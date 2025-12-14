@@ -280,62 +280,80 @@ async def create_user(
 # ============================================
 
 @app.get("/api/dashboard/summary", response_model=DashboardSummary)
-async def get_dashboard_summary(db: Session = Depends(get_db)):
-    """Get dashboard summary metrics."""
-    all_forecasts = db.query(Forecast).all()
-    future_forecasts = db.query(Forecast).filter(Forecast.is_forecast == 1).all()
-    recommendations = db.query(Recommendation).all()
-    rules = db.query(MBARule).all()
-    
-    # Calculate total products and islands from future forecasts
-    total_products = len(set(f.product_category for f in future_forecasts)) if future_forecasts else 0
-    total_islands = len(set(f.pulau for f in future_forecasts)) if future_forecasts else 0
-    
-    # Stockout risks: count products with low forecast (predicted < 20% of historical average)
-    stockout_risks = 0
-    if all_forecasts:
-        historical = [f for f in all_forecasts if f.is_forecast == 0]
-        future = [f for f in all_forecasts if f.is_forecast == 1]
-        
-        if historical:
-            # Group historical by product for average
-            hist_avg = {}
-            for h in historical:
-                key = (h.product_category, h.pulau)
-                if key not in hist_avg:
-                    hist_avg[key] = []
-                if h.actual:
-                    hist_avg[key].append(h.actual)
-            
-            # Count future forecasts below threshold
-            for f in future:
-                key = (f.product_category, f.pulau)
-                if key in hist_avg:
-                    avg = sum(hist_avg[key]) / len(hist_avg[key])
-                    if f.predicted and avg > 0 and f.predicted < avg * 0.2:
-                        stockout_risks += 1
-    
-    # Opportunities: count dead_stock recommendations or low-moving products
-    opportunities = len([r for r in recommendations if r.type == 'dead_stock'])
-    
-    # Calculate forecast accuracy (simplified MAPE)
-    historical = [f for f in all_forecasts if f.is_forecast == 0]
-    if historical:
-        errors = []
-        for h in historical:
-            if h.actual and h.actual > 0 and h.predicted:
-                error = abs(h.actual - h.predicted) / h.actual
-                errors.append(error)
-        mape = sum(errors) / len(errors) if errors else 0
-        accuracy = max(0, min(100, (1 - mape) * 100))
+async def get_dashboard_summary(
+    pulau: Optional[str] = Query(None, description="Filter by island name for per-region summary"),
+    db: Session = Depends(get_db)
+):
+    """Get dashboard summary metrics derived from backend data, optionally per pulau."""
+    # Base queries
+    forecasts_q = db.query(Forecast)
+    recommendations_q = db.query(Recommendation)
+    rules_q = db.query(MBARule)
+    metrics_q = db.query(ModelMetric)
+
+    pulau_norm = None
+    if pulau:
+        pulau_norm = pulau.strip().lower()
+        forecasts_q = forecasts_q.filter(func.lower(Forecast.pulau) == pulau_norm)
+        recommendations_q = recommendations_q.filter(func.lower(Recommendation.pulau) == pulau_norm)
+        rules_q = rules_q.filter(func.lower(MBARule.pulau) == pulau_norm)
+        metrics_q = metrics_q.filter(func.lower(ModelMetric.pulau) == pulau_norm)
+
+    forecasts = forecasts_q.all()
+    recommendations = recommendations_q.all()
+    rules = rules_q.all()
+
+    # Total Products → distinct product_category from uploaded dataset (forecasts table)
+    total_products = len({f.product_category for f in forecasts}) if forecasts else 0
+    # Total Islands → global count when not filtered; if filtered, 1 (or 0 when empty)
+    if pulau:
+        total_islands = 1 if forecasts else 0
     else:
-        accuracy = 87.5  # Default
-    
+        total_islands = len({f.pulau for f in forecasts}) if forecasts else 0
+
+    # Stockout Risk → demand decreasing: next forecast < current forecast per (product_category, pulau)
+    stockout_risks = 0
+    if forecasts:
+        from collections import defaultdict
+        series = defaultdict(list)
+        for f in forecasts:
+            if bool(f.is_forecast):
+                series[(f.product_category, f.pulau)].append(f)
+        for (_, _), rows in series.items():
+            rows.sort(key=lambda r: r.week or datetime.min)
+            if len(rows) >= 2:
+                cur = rows[-2]
+                nxt = rows[-1]
+                if (nxt.predicted or 0) < (cur.predicted or 0):
+                    stockout_risks += 1
+
+    # Bundling Opportunities → from MBA rules produced by the model
+    bundling_opportunities = len([r for r in rules if r.lift is not None and r.lift >= 1.0])
+
+    # Promotion Recommendations → from promo planner (recommendations table: type='dead_stock')
+    promo_recs = len([rec for rec in recommendations if rec.type == 'dead_stock'])
+
+    # Model Accuracy → from ModelMetric (direct MAPE value); fallback to historical MAPE if metrics absent
+    metrics_rows = metrics_q.all()
+    if metrics_rows:
+        mape_vals = [m.mape for m in metrics_rows if m.mape is not None]
+        accuracy = (sum(mape_vals) / len(mape_vals)) if mape_vals else 0.0
+    else:
+        historical = [f for f in forecasts if f.is_forecast == 0]
+        if historical:
+            errs = []
+            for h in historical:
+                if h.actual and h.actual > 0 and h.predicted:
+                    errs.append(abs(h.actual - h.predicted) / h.actual)
+            accuracy = (sum(errs) / len(errs) * 100.0) if errs else 0.0
+        else:
+            accuracy = 0.0
+
     return DashboardSummary(
         total_products=total_products,
         total_islands=total_islands,
         stockout_risks=stockout_risks,
-        opportunities=opportunities,
+        opportunities=bundling_opportunities,
         forecast_accuracy=round(accuracy, 1)
     )
 

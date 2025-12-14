@@ -95,9 +95,12 @@ export const api = {
     return handleResponse(response);
   },
 
-  // Get dashboard summary
-  async getDashboardSummary(): Promise<DashboardSummary> {
-    const response = await fetch(`${API_BASE_URL}/api/dashboard/summary`);
+  // Get dashboard summary (optionally filtered by pulau)
+  async getDashboardSummary(pulau?: string): Promise<DashboardSummary> {
+    const url = pulau
+      ? `${API_BASE_URL}/api/dashboard/summary?pulau=${encodeURIComponent(pulau)}`
+      : `${API_BASE_URL}/api/dashboard/summary`;
+    const response = await fetch(url);
     return handleResponse(response);
   },
 

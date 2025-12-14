@@ -12,10 +12,10 @@ export const queryKeys = {
 };
 
 // Dashboard Summary Hook
-export function useDashboardSummary() {
+export function useDashboardSummary(pulau?: string) {
   return useQuery({
-    queryKey: queryKeys.dashboardSummary,
-    queryFn: () => api.getDashboardSummary(),
+    queryKey: pulau ? [...queryKeys.dashboardSummary, pulau] : queryKeys.dashboardSummary,
+    queryFn: () => api.getDashboardSummary(pulau),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 }

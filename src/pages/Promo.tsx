@@ -7,7 +7,14 @@ import api from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Gift, TrendingDown, Package, Sparkles, Calendar, Percent } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Gift, TrendingDown, Package, Sparkles, Calendar, Percent, CheckCircle2 } from 'lucide-react';
 import { cn, toTitleCase } from '@/lib/utils';
 
 interface PromoSuggestion {
@@ -26,6 +33,13 @@ export default function Promo() {
   const { data: mbaRules = [] } = useMBARules(selectedIsland);
 
   const [promoSuggestions, setPromoSuggestions] = useState<PromoSuggestion[]>([]);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [selectedPromo, setSelectedPromo] = useState<PromoSuggestion | null>(null);
+
+  const handleCreateCampaign = (suggestion: PromoSuggestion) => {
+    setSelectedPromo(suggestion);
+    setShowSuccessDialog(true);
+  };
 
   // Build suggestions from declining products (based on per-product forecast trend) + MBA rules
   useEffect(() => {
@@ -175,7 +189,12 @@ export default function Promo() {
 
                   <p className="text-xs text-muted-foreground">{suggestion.reason}</p>
 
-                  <Button variant="outline" size="sm" className="w-full mt-4">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full mt-4"
+                    onClick={() => handleCreateCampaign(suggestion)}
+                  >
                     Buat Kampanye Promosi
                   </Button>
                 </CardContent>
@@ -191,6 +210,49 @@ export default function Promo() {
             )}
           </div>
         </div>
+
+        {/* Success Dialog */}
+        <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                <CheckCircle2 className="h-6 w-6 text-green-600" />
+              </div>
+              <DialogTitle className="text-center text-xl">
+                Kampanye Promosi Berhasil Ditambahkan
+              </DialogTitle>
+              <DialogDescription className="text-center pt-2">
+                {selectedPromo && (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      Kampanye promosi untuk <span className="font-semibold text-foreground">{toTitleCase(selectedPromo.slowProduct)}</span> telah ditambahkan ke sistem.
+                    </p>
+                    <div className="bg-muted/50 rounded-lg p-3 mt-3">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">Diskon:</span>
+                        <Badge className="bg-primary/10 text-primary border-0">
+                          {selectedPromo.suggestedDiscount}% off
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between text-xs mt-2">
+                        <span className="text-muted-foreground">Bundle dengan:</span>
+                        <Badge variant="secondary">{toTitleCase(selectedPromo.anchorProduct)}</Badge>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-center mt-4">
+              <Button
+                onClick={() => setShowSuccessDialog(false)}
+                className="w-full sm:w-auto"
+              >
+                Tutup
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

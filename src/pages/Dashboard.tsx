@@ -6,8 +6,7 @@ import { RecommendationCard } from '@/components/dashboard/RecommendationCard';
 import { IslandSelector } from '@/components/dashboard/IslandSelector';
 import { AlertBanner } from '@/components/dashboard/AlertBanner';
 import { MBARulesTable } from '@/components/dashboard/MBARulesTable';
-import { getDashboardMetrics } from '@/lib/mockData';
-import { TrendingUp, AlertTriangle, Package, Gift, Target, Loader2 } from 'lucide-react';
+import { AlertTriangle, Package, Gift, Target, Loader2 } from 'lucide-react';
 import { useDashboardSummary, useRecommendations, useIslands, useProducts, useMBARules } from '@/hooks/useApi';
 import api from '@/lib/api';
 
@@ -26,43 +25,72 @@ export default function Dashboard() {
   const { data: products = [] } = useProducts(selectedIsland);
   const [userName, setUserName] = useState<string>('');
   
-  // API Hooks with fallback to mock data
-  const { data: apiSummary, isLoading: summaryLoading } = useDashboardSummary();
+  // API Hooks (no mock fallback)
+  const { data: apiSummary, isLoading: summaryLoading } = useDashboardSummary(selectedIsland);
   const { data: apiRecommendations } = useRecommendations(selectedIsland);
   const { data: mbaRules = [] } = useMBARules(selectedIsland);
 
-  // Computed region-aware metrics (client-side, limited)
-  const [computedLoading, setComputedLoading] = useState(false);
-  const [computedMetrics, setComputedMetrics] = useState({
-    stockoutRisks: 0,
-    bundlingOpportunities: 0,
-    promoSuggestions: 0,
-    modelAccuracy: apiSummary?.forecast_accuracy ?? 0,
-  });
-  
-  // Use API data or fallback to mock
-  const metrics = useMemo(() => {
-    if (apiSummary) {
-      return {
-        totalProducts: apiSummary.total_products,
-        totalIslands: apiSummary.total_islands,
-        stockoutRisks: apiSummary.stockout_risks,
-        bundlingOpportunities: apiSummary.opportunities,
-        promoSuggestions: Math.floor(apiSummary.opportunities * 0.6),
-        accuracyScore: apiSummary.forecast_accuracy,
-      } as const;
+  // Promo suggestions count: same logic as Promo.tsx (declining products + MBA rules)
+  const [promoSuggestionsCount, setPromoSuggestionsCount] = useState<number>(0);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function computePromoCount() {
+      let count = 0;
+      const list = (products || []).slice(0, 24);
+
+      const promises = list.map((p) => api.getForecast(selectedIsland, p).catch(() => null));
+      const results = await Promise.all(promises);
+
+      for (let i = 0; i < list.length; i++) {
+        const product = list[i];
+        const res = results[i] || null;
+        const rows = (res && res.forecast_data) ? res.forecast_data : (res || []);
+        if (!rows || !rows.length) continue;
+
+        const current = rows.slice(-1)[0];
+        const next = rows.find((r: any) => r.is_forecast) || rows[rows.length - 1];
+
+        const currentVal = current ? Math.round(current.predicted || 0) : 0;
+        const nextVal = next ? Math.round(next.predicted || 0) : 0;
+
+        const changePct = currentVal > 0 ? ((nextVal - currentVal) / currentVal) * 100 : 0;
+
+        // consider declining if forecast drops by more than 5%
+        if (changePct < -5) {
+          // find MBA rule where this product is consequent
+          const rule = (mbaRules || []).find((r: any) => {
+            const consequents = Array.isArray(r.consequents) ? r.consequents : [r.consequents];
+            return consequents.includes(product) && (r.lift || 0) > 2;
+          });
+
+          if (rule) {
+            count++;
+          }
+        }
+      }
+
+      if (mounted) setPromoSuggestionsCount(count);
     }
 
-    const fallback = getDashboardMetrics();
+    computePromoCount();
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedIsland, products, mbaRules]);
+  
+  const metrics = useMemo(() => {
+    if (!apiSummary) return null;
     return {
-      totalProducts: (products && products.length > 0) ? products.length : (fallback.totalForecastRevenue ?? 0),
-      totalIslands: (islands && islands.length > 0) ? islands.length : 1,
-      stockoutRisks: fallback.stockoutRisks,
-      bundlingOpportunities: fallback.bundlingOpportunities,
-      promoSuggestions: fallback.promoSuggestions,
-      accuracyScore: Number(fallback.accuracyScore) || 0,
+      totalProducts: apiSummary.total_products,
+      totalIslands: apiSummary.total_islands,
+      stockoutRisks: apiSummary.stockout_risks,
+      bundlingOpportunities: apiSummary.opportunities,
+      accuracyScore: apiSummary.forecast_accuracy,
     } as const;
-  }, [apiSummary, products, islands]);
+  }, [apiSummary]);
 
   useEffect(() => {
     const stored = localStorage.getItem('dataniaga_user');
@@ -98,14 +126,18 @@ export default function Dashboard() {
         .slice(0, 5) // top 5 per category
         .map((r, idx) => ({
           id: `api-${t}-${idx}`,
-          pulau: selectedIsland,
           type: r.type as 'derived_demand' | 'dead_stock',
           product: r.product,
-          relatedProduct: r.related_product,
+          related_product: r.related_product,
+          title: r.product,
+          description: r.action,
+          anchorProduct: r.product,
+          targetProduct: r.related_product,
           action: r.action,
-          priority: r.priority as 'high' | 'medium' | 'low',
-          confidence: (r as any).confidence,
-        }));
+          priority: (r.priority as 'high' | 'medium' | 'low') || 'medium',
+          confidence: (r as any).confidence || 0.85,
+          expectedImpact: 'Direkomendasikan',
+        } as any));
     });
 
     return byType;
@@ -113,93 +145,7 @@ export default function Dashboard() {
 
   const topCategories = products.slice(0, 4);
 
-  // Compute client-side metrics: limited to top N products to avoid too many requests
-  useEffect(() => {
-    let mounted = true;
-    const N = 24;
-
-    async function computeMetrics() {
-      if (!selectedIsland || (products || []).length === 0) {
-        return;
-      }
-      setComputedLoading(true);
-
-      try {
-  const list = (products || []).slice(0, N);
-  // fetch forecasts in parallel (backend may return { forecast_data, model_metrics })
-  const promises = list.map((p) => api.getForecast(selectedIsland, p).catch(() => null));
-  const results = await Promise.all(promises);
-
-        // stockout: next < current
-        let stockout = 0;
-        const perProductMAPEs: number[] = [];
-
-        for (let i = 0; i < list.length; i++) {
-          const res = results[i] || null;
-          const rows = (res && res.forecast_data) ? res.forecast_data : (res || []);
-          if (!rows.length) continue;
-
-          const current = rows.slice(-2)[0] ?? rows[rows.length - 1];
-          const next = rows[rows.length - 1];
-          const currentVal = current ? (current.predicted ?? current.actual ?? 0) : 0;
-          const nextVal = next ? (next.predicted ?? next.actual ?? 0) : 0;
-          if (nextVal < currentVal) stockout += 1;
-
-          // compute MAPE for product if actuals exist
-          const pairs = rows.filter((r: any) => r.actual != null && r.predicted != null);
-          if (pairs.length) {
-            const mape = pairs.reduce((acc: number, r: any) => acc + Math.abs((r.actual - r.predicted) / Math.max(1, r.actual)), 0) / pairs.length * 100;
-            if (!Number.isNaN(mape) && Number.isFinite(mape)) perProductMAPEs.push(mape);
-          }
-        }
-
-        // bundling opportunities: count mba rules in region with lift >= 1.5
-        const bundling = (mbaRules || []).filter((r: any) => (r.lift ?? 0) >= 1.5).length;
-
-        // promo suggestions: prefer API recommendations if available otherwise derive from declines matched with mba rules
-        let promoCount = 0;
-        if (apiRecommendations && apiRecommendations.length > 0) {
-          promoCount = apiRecommendations.length;
-        } else {
-          // derive: count of products where decline AND there exists an mba rule with the product as consequent
-          const derived = new Set<string>();
-          for (let i = 0; i < list.length; i++) {
-            const product = list[i];
-            const res = results[i] || null;
-            const rows = (res && res.forecast_data) ? res.forecast_data : (res || []);
-            if (!rows.length) continue;
-            const current = rows.slice(-2)[0] ?? rows[rows.length - 1];
-            const next = rows[rows.length - 1];
-            const currentVal = current ? (current.predicted ?? current.actual ?? 0) : 0;
-            const nextVal = next ? (next.predicted ?? next.actual ?? 0) : 0;
-            if (nextVal < currentVal) {
-              const rule = (mbaRules || []).find((r: any) => {
-                const consequents = Array.isArray(r.consequents) ? r.consequents : [r.consequents];
-                return consequents.includes(product);
-              });
-              if (rule) derived.add(product);
-            }
-          }
-          promoCount = derived.size;
-        }
-
-        const modelAcc = apiSummary?.forecast_accuracy ?? (perProductMAPEs.length ? Math.round(perProductMAPEs.reduce((a, b) => a + b, 0) / perProductMAPEs.length) : 0);
-
-        if (mounted) {
-          setComputedMetrics({ stockoutRisks: stockout, bundlingOpportunities: bundling, promoSuggestions: promoCount, modelAccuracy: modelAcc });
-        }
-      } catch (err) {
-        console.warn('Failed computing metrics', err);
-      } finally {
-        if (mounted) setComputedLoading(false);
-      }
-    }
-
-    computeMetrics();
-    return () => {
-      mounted = false;
-    };
-  }, [selectedIsland, products, mbaRules, apiRecommendations, apiSummary]);
+  // No client-side computations; metrics strictly come from backend summary
 
   return (
     <DashboardLayout>
@@ -220,39 +166,39 @@ export default function Dashboard() {
         {/* Alert Banner */}
         <AlertBanner island={selectedIsland} />
 
-        {/* Metrics Grid */}
+        {/* Metrics Grid (backend-only) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            <MetricCard
-              title="Total Produk"
-              value={summaryLoading ? '...' : String(metrics.totalProducts)}
-              subtitle="SKU terlacak"
-              icon={<Loader2 className="w-5 h-5" />}
-              variant="primary"
-            />
+          <MetricCard
+            title="Total Produk"
+            value={summaryLoading || !metrics ? '...' : String(metrics.totalProducts)}
+            subtitle="SKU terlacak"
+            icon={<Loader2 className="w-5 h-5" />}
+            variant="primary"
+          />
           <MetricCard
             title="Risiko Kehabisan Stok"
-            value={summaryLoading ? '...' : (apiSummary?.stockout_risks ?? computedMetrics.stockoutRisks)}
+            value={summaryLoading || !metrics ? '...' : metrics.stockoutRisks}
             subtitle="Item yang berisiko"
             icon={<AlertTriangle className="w-5 h-5" />}
             variant="danger"
           />
           <MetricCard
             title="Peluang Bundel"
-            value={summaryLoading ? '...' : (apiSummary?.opportunities ?? computedMetrics.bundlingOpportunities)}
+            value={summaryLoading || !metrics ? '...' : metrics.bundlingOpportunities}
             subtitle="Pasangan dengan lift tinggi"
             icon={<Package className="w-5 h-5" />}
             variant="success"
           />
           <MetricCard
             title="Saran Promosi"
-            value={summaryLoading || computedLoading ? '...' : computedMetrics.promoSuggestions}
+            value={summaryLoading || !metrics ? '...' : promoSuggestionsCount}
             subtitle="Item stok mati"
             icon={<Gift className="w-5 h-5" />}
             variant="warning"
           />
           <MetricCard
             title="Akurasi Model"
-            value={summaryLoading || computedLoading ? '...' : `${computedMetrics.modelAccuracy}%`}
+            value={summaryLoading || !metrics ? '...' : `${metrics.accuracyScore}%`}
             subtitle="Skor MAPE rata-rata"
             icon={<Target className="w-5 h-5" />}
             variant="default"
@@ -260,7 +206,7 @@ export default function Dashboard() {
         </div>
 
         <div className="text-xs text-muted-foreground mt-2">
-          Sumber data: {apiSummary ? 'API Langsung' : 'Data simulasi / tidak ada respons API'}
+          Sumber data: {apiSummary ? 'API Langsung' : 'Menunggu data API'}
         </div>
 
         {/* Charts Row */}

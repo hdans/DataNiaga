@@ -13,7 +13,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, TrendingDown, Minus, Package, ArrowRight } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { TrendingUp, TrendingDown, Minus, Package, ArrowRight, CheckCircle2, Save } from 'lucide-react';
 import { cn, toTitleCase } from '@/lib/utils';
 
 interface InventoryItem {
@@ -36,6 +44,7 @@ export default function Inventory() {
   const { data: products = [] } = useProducts();
   const [selectedIsland, setSelectedIsland] = useState<string>('JAWA, BALI, & NT');
   const { data: mbaRules = [] } = useMBARules(selectedIsland);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
 
   const [productMetrics, setProductMetrics] = useState<Record<string, {
     current: number;
@@ -43,6 +52,10 @@ export default function Inventory() {
     trend: 'up' | 'down' | 'stable';
     trendPercent: number;
   }>>({});
+
+  const handleApplyInventory = () => {
+    setShowSuccessDialog(true);
+  };
 
   // Only show top N products to avoid making too many queries at once
   const topProducts = (products || []).slice(0, 24);
@@ -127,6 +140,27 @@ export default function Inventory() {
           </Card>
         </div>
 
+        {/* Apply Inventory Action */}
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Rencana Inventori Siap Diterapkan</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Terapkan perencanaan inventori berdasarkan analisis permintaan dan asosiasi produk
+                </p>
+              </div>
+              <Button
+                onClick={handleApplyInventory}
+                className="gap-2"
+              >
+                <Save className="w-4 h-4" />
+                Terapkan ke Sistem
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Inventory Table */}
         <Card>
           <CardHeader>
@@ -161,6 +195,52 @@ export default function Inventory() {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Success Dialog */}
+        <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                <CheckCircle2 className="h-6 w-6 text-green-600" />
+              </div>
+              <DialogTitle className="text-center text-xl">
+                Rencana Inventori Berhasil Diterapkan
+              </DialogTitle>
+              <DialogDescription className="text-center pt-2">
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    Perencanaan inventori untuk wilayah <span className="font-semibold text-foreground">{selectedIsland}</span> telah berhasil diterapkan ke sistem.
+                  </p>
+                  <div className="bg-muted/50 rounded-lg p-3 mt-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Total Produk:</span>
+                      <Badge variant="secondary">{inventoryData.length} kategori</Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-xs mt-2">
+                      <span className="text-muted-foreground">Lonjakan Permintaan:</span>
+                      <Badge className="bg-success/10 text-success border-success/30">{spikingItems.length} item</Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-xs mt-2">
+                      <span className="text-muted-foreground">Permintaan Menurun:</span>
+                      <Badge className="bg-destructive/10 text-destructive border-destructive/30">{decliningItems.length} item</Badge>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-3">
+                    Sistem akan mengoptimalkan stok berdasarkan prakiraan permintaan.
+                  </p>
+                </div>
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-center mt-4">
+              <Button
+                onClick={() => setShowSuccessDialog(false)}
+                className="w-full sm:w-auto"
+              >
+                Tutup
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

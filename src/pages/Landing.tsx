@@ -85,7 +85,7 @@ export default function Landing() {
               </Link>
               <Link to="/tutorial">
                 <Button variant="outline" size="lg" className="gap-2">
-                  Tonton Demo
+                  Panduan Pengunaan
                 </Button>
               </Link>
             </div>
