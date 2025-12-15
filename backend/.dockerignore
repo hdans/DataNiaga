@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+.venv/
+dist/
+node_modules/
+tests/
+README.md
+*.csv
+*.xlsx
