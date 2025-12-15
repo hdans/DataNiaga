@@ -14,6 +14,7 @@ import pandas as pd
 from io import BytesIO
 from datetime import datetime
 from typing import Optional, List
+import os
 
 from database import engine, get_db, Base
 from models import Forecast, MBARule, Recommendation, UserSession, ModelMetric
@@ -54,17 +55,26 @@ app = FastAPI(
 )
 
 # CORS configuration for React frontend - MUST be first middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+# In production, set ALLOWED_ORIGINS to a comma-separated list, e.g.:
+#   ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://www.yourdomain.com
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
+if allowed_origins_env:
+    allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+else:
+    # Development defaults
+    allowed_origins = [
         "http://localhost:5173",
         "http://localhost:3000",
         "http://localhost:8080",
         "http://127.0.0.1:8080",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:3000",
-        "*"  # Allow all in development
-    ],
+        "*",
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
