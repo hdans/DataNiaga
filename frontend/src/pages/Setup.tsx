@@ -22,11 +22,13 @@ import {
   Loader2,
   X,
   ChevronDown,
-  Info
+  Info,
+  Sparkles
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUploadData, useCreateUser } from '@/hooks/useApi';
 import { toast } from 'sonner';
+import dummyDataUrl from '@/assets/data_dummy.csv?url';
 
 const REQUIRED_COLUMNS = ['InvoiceNo', 'InvoiceDate', 'PULAU', 'PRODUCT_CATEGORY', 'Quantity'];
 
@@ -475,6 +477,93 @@ export default function Setup() {
     navigate('/dashboard');
   };
 
+  // Use dummy data
+  const handleUseDummyData = async () => {
+    try {
+      setProcessingStep('uploading');
+      setProgress(10);
+      toast.info('Memuat data bawaan...');
+
+      // Fetch dummy data
+      const response = await fetch(dummyDataUrl);
+      const text = await response.text();
+
+      // Validate
+      setProcessingStep('validating');
+      setProgress(30);
+      
+      let parsedData: Record<string, string>[];
+      try {
+        parsedData = parseCSV(text);
+      } catch (parseError: any) {
+        throw new Error(`Gagal parse CSV: ${parseError.message}`);
+      }
+
+      const validation = validateDataStructure(parsedData);
+      setValidationResult(validation);
+
+      if (!validation.isValid) {
+        setShowValidationDetails(true);
+        const errorCount = validation.errors.length;
+        setValidationError(`❌ Data tidak valid: ${errorCount} kesalahan ditemukan.`);
+        toast.error(`Data validation failed: ${errorCount} errors found`);
+        setProcessingStep('error');
+        return;
+      }
+
+      // Create File object from dummy data
+      const blob = new Blob([text], { type: 'text/csv' });
+      const dummyFile = new File([blob], 'data_dummy.csv', { type: 'text/csv' });
+      
+      setFile(dummyFile);
+
+      // Process with API or simulate
+      setProcessingStep('forecasting');
+      setProgress(50);
+
+      try {
+        const result = await uploadMutation.mutateAsync(dummyFile);
+        setProgress(70);
+        setProcessingStep('mba');
+        await new Promise(r => setTimeout(r, 500));
+        
+        setProgress(90);
+        await createUserMutation.mutateAsync(userInfo);
+        
+        localStorage.setItem('dataniaga_user', JSON.stringify(userInfo));
+        
+        setProgress(100);
+        setProcessingStep('complete');
+        toast.success(`Data bawaan berhasil diproses: ${result.records} records`);
+        
+        await new Promise(r => setTimeout(r, 800));
+        navigate('/dashboard');
+      } catch (apiError) {
+        // Fallback to simulation if API fails
+        setProgress(70);
+        setProcessingStep('mba');
+        await new Promise(r => setTimeout(r, 1200));
+        
+        setProgress(90);
+        await new Promise(r => setTimeout(r, 500));
+        
+        localStorage.setItem('dataniaga_user', JSON.stringify(userInfo));
+        
+        setProgress(100);
+        setProcessingStep('complete');
+        toast.success('Data bawaan berhasil dimuat (demo mode)');
+        
+        await new Promise(r => setTimeout(r, 800));
+        navigate('/dashboard');
+      }
+    } catch (error: any) {
+      setProcessingStep('error');
+      const message = error?.message || 'Gagal memuat data bawaan';
+      setValidationError(`❌ ${message}`);
+      toast.error(message);
+    }
+  };
+
   const handleProcessData = async () => {
     if (!file) {
       setValidationError('Please upload a file first');
@@ -690,6 +779,39 @@ export default function Setup() {
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
+              </div>
+
+              {/* Dummy Data Option */}
+              <div className="bg-gradient-to-r from-primary/10 via-primary/5 to-primary/10 rounded-lg p-4 border border-primary/30">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
+                      <Sparkles className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="text-left">
+                      <h4 className="font-semibold text-foreground">Coba Dengan Data Demo</h4>
+                      <p className="text-sm text-muted-foreground">Langsung lihat dashboard dengan data contoh</p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="border-primary/50 hover:bg-primary/10"
+                    onClick={handleUseDummyData}
+                  >
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Pakai Data Bawaan
+                  </Button>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div className="relative">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">atau unggah data Anda</span>
+                </div>
               </div>
 
               {/* Upload Zone */}
