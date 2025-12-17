@@ -12,6 +12,7 @@ Uses in-memory storage (no database) for single-session analysis workflow.
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from io import BytesIO
+import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import os
@@ -50,6 +51,8 @@ data_store: Dict[str, Any] = {
 }
 
 # Initialize FastAPI app
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
     title="DataNiaga API",
     description="Retail Decision Support System - AI-powered forecasting and recommendations",
@@ -69,6 +72,8 @@ allowed_origins = [
     "https://*.vercel.app",
     "*",
 ]
+
+logger.info("FastAPI app initialized")
 
 app.add_middleware(
     CORSMiddleware,
@@ -636,6 +641,12 @@ async def root():
     return {"message": "DataNiaga API is running", "version": "1.0.0"}
 
 
+@app.get("/ping")
+async def ping():
+    """Lightweight ping for health checks without loading heavy deps."""
+    return {"status": "ok"}
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -655,4 +666,4 @@ async def debug_products(pulau: Optional[str] = Query(None)):
     return [p for p in products if p]
 
 
-# ASGI app is exposed as module-level variable `app` for Vercel
+handler = app  # Explicit handler alias for Vercel Python runtime
