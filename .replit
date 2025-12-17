@@ -1,0 +1,6 @@
+run = "cd api && uvicorn index:app --host 0.0.0.0 --port 8080"
+language = "python3"
+modules = ["python-3.11"]
+
+[deployment]
+run = ["sh", "-c", "cd api && uvicorn index:app --host 0.0.0.0 --port 8080"]
