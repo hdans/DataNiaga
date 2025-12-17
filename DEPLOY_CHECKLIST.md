@@ -82,7 +82,15 @@ DataNiaga/
 
 ## ⚠️ Important Warnings
 
-### 1. Timeout 60 Seconds Max
+### 1. Memory Limit (Hobby Plan)
+```
+Personal Account (Free): Max 2048 MB
+Kita set ke: 1536 MB (aman untuk Hobby plan)
+Pro Plan: Up to 3008 MB
+```
+**To upgrade:** Create a team in Vercel → switch to Pro plan
+
+### 2. Timeout 60 Seconds Max
 ```
 Dataset > 5MB + ML processing bisa timeout
 Solution: Use smaller dataset OR switch to Render backend
