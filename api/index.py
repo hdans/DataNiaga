@@ -3,7 +3,7 @@ DataNiaga FastAPI Backend for Vercel Serverless
 ================================================
 
 Main application file untuk Retail Decision Support System.
-Adapted for Vercel serverless functions with Mangum ASGI adapter.
+Adapted for Vercel Python Serverless (ASGI) – no Mangum needed.
 
 Endpoints untuk upload data, forecasting, MBA, dan recommendations.
 Uses in-memory storage (no database) for single-session analysis workflow.
@@ -11,8 +11,6 @@ Uses in-memory storage (no database) for single-session analysis workflow.
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from mangum import Mangum
-import pandas as pd
 from io import BytesIO
 from datetime import datetime
 from typing import Optional, List, Dict, Any
@@ -24,28 +22,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 try:
     from backend.schemas import (
-        UserCreate, UserResponse, ForecastResponse, MBARuleResponse, 
-        RecommendationResponse, DashboardSummary, UploadResponse
-    )
-    from backend.services.forecasting import run_all_forecasts
-    from backend.services.mba import run_all_mba
-    from backend.services.recommendations import (
-        generate_recommendations, 
-        get_stockout_risks, 
-        get_bundling_opportunities
+        UserCreate, UserResponse, ForecastResponse, MBARuleResponse,
+        RecommendationResponse, DashboardSummary, UploadResponse,
     )
 except ImportError:
-    # Fallback for local testing
     from schemas import (
-        UserCreate, UserResponse, ForecastResponse, MBARuleResponse, 
-        RecommendationResponse, DashboardSummary, UploadResponse
-    )
-    from services.forecasting import run_all_forecasts
-    from services.mba import run_all_mba
-    from services.recommendations import (
-        generate_recommendations, 
-        get_stockout_risks, 
-        get_bundling_opportunities
+        UserCreate, UserResponse, ForecastResponse, MBARuleResponse,
+        RecommendationResponse, DashboardSummary, UploadResponse,
     )
 
 # ============================================
@@ -71,9 +54,9 @@ app = FastAPI(
     title="DataNiaga API",
     description="Retail Decision Support System - AI-powered forecasting and recommendations",
     version="1.0.0",
-    docs_url="/api/docs",
-    redoc_url="/api/redoc",
-    openapi_url="/api/openapi.json"
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
 )
 
 # CORS configuration for React frontend
@@ -122,7 +105,7 @@ def validate_dataframe(df: pd.DataFrame) -> None:
 # UPLOAD & PROCESSING ENDPOINTS
 # ============================================
 
-@app.post("/api/upload-data", response_model=UploadResponse)
+@app.post("/upload-data", response_model=UploadResponse)
 async def upload_data(file: UploadFile = File(...)):
     """
     Upload and process sales data file.
@@ -139,6 +122,9 @@ async def upload_data(file: UploadFile = File(...)):
     Data stored in-memory for session duration.
     """
     try:
+        # Lazy imports of heavy libs (speed up cold start / health checks)
+        import pandas as pd
+
         # Read uploaded file
         content = await file.read()
         
@@ -171,6 +157,27 @@ async def upload_data(file: UploadFile = File(...)):
         data_store["model_metrics"] = []
         data_store["metadata"]["upload_timestamp"] = datetime.now().isoformat()
         
+        # Lazy import services only when needed
+        try:
+            try:
+                from backend.services.forecasting import run_all_forecasts
+                from backend.services.mba import run_all_mba
+                from backend.services.recommendations import (
+                    generate_recommendations,
+                    get_stockout_risks,
+                    get_bundling_opportunities,
+                )
+            except ImportError:
+                from services.forecasting import run_all_forecasts
+                from services.mba import run_all_mba
+                from services.recommendations import (
+                    generate_recommendations,
+                    get_stockout_risks,
+                    get_bundling_opportunities,
+                )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Service import failed: {str(e)}")
+
         # Run forecasting pipeline
         print("Starting forecasting pipeline...")
         try:
@@ -247,7 +254,7 @@ async def upload_data(file: UploadFile = File(...)):
 # USER ENDPOINTS
 # ============================================
 
-@app.post("/api/user", response_model=UserResponse)
+@app.post("/user", response_model=UserResponse)
 async def create_user(user: UserCreate):
     """Save user session information to memory."""
     data_store["user"] = {
@@ -266,7 +273,7 @@ async def create_user(user: UserCreate):
 # DASHBOARD ENDPOINTS
 # ============================================
 
-@app.get("/api/dashboard/summary", response_model=DashboardSummary)
+@app.get("/dashboard/summary", response_model=DashboardSummary)
 async def get_dashboard_summary(
     pulau: Optional[str] = Query(None, description="Filter by island name for per-region summary")
 ):
@@ -338,7 +345,7 @@ async def get_dashboard_summary(
     )
 
 
-@app.get("/api/training-metadata")
+@app.get("/training-metadata")
 async def get_training_metadata():
     """Get model training metadata."""
     try:
@@ -364,7 +371,7 @@ async def get_training_metadata():
 # FORECAST ENDPOINTS
 # ============================================
 
-@app.get("/api/forecast")
+@app.get("/forecast")
 async def get_forecast(
     pulau: Optional[str] = Query(None, description="Filter by island name"),
     product: Optional[str] = Query(None, description="Filter by product category")
@@ -441,7 +448,7 @@ async def get_forecast(
     }
 
 
-@app.get("/api/forecast/metrics")
+@app.get("/forecast/metrics")
 async def get_forecast_metrics(
     pulau: Optional[str] = Query(None, description="Filter by island name"),
     product: Optional[str] = Query(None, description="Filter by product category")
@@ -539,7 +546,7 @@ async def get_forecast_metrics(
 # MBA ENDPOINTS
 # ============================================
 
-@app.get("/api/mba-rules", response_model=List[MBARuleResponse])
+@app.get("/mba-rules", response_model=List[MBARuleResponse])
 async def get_mba_rules(
     pulau: Optional[str] = Query(None, description="Filter by island name"),
     min_lift: float = Query(1.0, description="Minimum lift threshold"),
@@ -570,7 +577,7 @@ async def get_mba_rules(
 # RECOMMENDATION ENDPOINTS
 # ============================================
 
-@app.get("/api/recommendations", response_model=List[RecommendationResponse])
+@app.get("/recommendations", response_model=List[RecommendationResponse])
 async def get_recommendations(
     pulau: Optional[str] = Query(None, description="Filter by island name"),
     type: Optional[str] = Query(None, description="Filter by type: derived_demand or dead_stock"),
@@ -603,7 +610,7 @@ async def get_recommendations(
 # UTILITY ENDPOINTS
 # ============================================
 
-@app.get("/api/islands", response_model=List[str])
+@app.get("/islands", response_model=List[str])
 async def get_islands():
     """Get list of available islands/regions."""
     forecasts = data_store["forecasts"]
@@ -611,7 +618,7 @@ async def get_islands():
     return sorted([i for i in islands if i])
 
 
-@app.get("/api/products", response_model=List[str])
+@app.get("/products", response_model=List[str])
 async def get_products(pulau: Optional[str] = Query(None)):
     """Get list of available product categories."""
     forecasts = data_store["forecasts"]
@@ -629,7 +636,7 @@ async def root():
     return {"message": "DataNiaga API is running", "version": "1.0.0"}
 
 
-@app.get("/api/health")
+@app.get("/health")
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
@@ -648,8 +655,4 @@ async def debug_products(pulau: Optional[str] = Query(None)):
     return [p for p in products if p]
 
 
-# ============================================
-# MANGUM HANDLER FOR VERCEL
-# ============================================
-# This is the entry point for Vercel serverless functions
-handler = Mangum(app, lifespan="off")
+# ASGI app is exposed as module-level variable `app` for Vercel
