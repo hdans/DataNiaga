@@ -1,4 +1,10 @@
 {
-  "buildCommand": "pip install -r requirements.txt && npm --prefix frontend ci && npm --prefix frontend run build",
-  "outputDirectory": "frontend/dist"
+  "buildCommand": "npm --prefix frontend ci && npm --prefix frontend run build",
+  "outputDirectory": "frontend/dist",
+  "installCommand": "pip install -r requirements.txt",
+  "functions": {
+    "api/**/*.py": {
+      "includeFiles": "requirements.txt"
+    }
+  }
 }
