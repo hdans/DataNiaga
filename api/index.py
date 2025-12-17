@@ -1,38 +1,58 @@
 """
-DataNiaga FastAPI Backend
-=========================
+DataNiaga FastAPI Backend for Vercel Serverless
+================================================
 
 Main application file untuk Retail Decision Support System.
-Endpoints untuk upload data, forecasting, MBA, dan recommendations.
+Adapted for Vercel serverless functions with Mangum ASGI adapter.
 
+Endpoints untuk upload data, forecasting, MBA, dan recommendations.
 Uses in-memory storage (no database) for single-session analysis workflow.
 """
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from mangum import Mangum
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 import os
+import sys
 
-from schemas import (
-    UserCreate, UserResponse, ForecastResponse, MBARuleResponse, 
-    RecommendationResponse, DashboardSummary, UploadResponse
-)
-from services.forecasting import run_all_forecasts
-from services.mba import run_all_mba
-from services.recommendations import (
-    generate_recommendations, 
-    get_stockout_risks, 
-    get_bundling_opportunities
-)
+# Add parent directories to path for imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    from backend.schemas import (
+        UserCreate, UserResponse, ForecastResponse, MBARuleResponse, 
+        RecommendationResponse, DashboardSummary, UploadResponse
+    )
+    from backend.services.forecasting import run_all_forecasts
+    from backend.services.mba import run_all_mba
+    from backend.services.recommendations import (
+        generate_recommendations, 
+        get_stockout_risks, 
+        get_bundling_opportunities
+    )
+except ImportError:
+    # Fallback for local testing
+    from schemas import (
+        UserCreate, UserResponse, ForecastResponse, MBARuleResponse, 
+        RecommendationResponse, DashboardSummary, UploadResponse
+    )
+    from services.forecasting import run_all_forecasts
+    from services.mba import run_all_mba
+    from services.recommendations import (
+        generate_recommendations, 
+        get_stockout_risks, 
+        get_bundling_opportunities
+    )
 
 # ============================================
 # IN-MEMORY DATA STORE
 # ============================================
 # All data stored in-memory for single session.
-# Data persists until server restart.
+# Data persists until function restart (within Vercel execution context).
 data_store: Dict[str, Any] = {
     "transactions": None,        # pd.DataFrame - raw uploaded data
     "forecasts": [],            # list of forecast dicts
@@ -51,27 +71,21 @@ app = FastAPI(
     title="DataNiaga API",
     description="Retail Decision Support System - AI-powered forecasting and recommendations",
     version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_url="/api/openapi.json"
 )
 
-# CORS configuration for React frontend - MUST be first middleware
-# In production, set ALLOWED_ORIGINS to a comma-separated list, e.g.:
-#   ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://www.yourdomain.com
-allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
-if allowed_origins_env:
-    allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
-else:
-    # Development defaults
-    allowed_origins = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://localhost:8080",
-        "http://127.0.0.1:8080",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:3000",
-        "*",
-    ]
+# CORS configuration for React frontend
+# Vercel domains, localhost for dev, and wildcard for flexibility
+allowed_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:3000",
+    "https://*.vercel.app",
+    "*",
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -355,15 +369,7 @@ async def get_forecast(
     pulau: Optional[str] = Query(None, description="Filter by island name"),
     product: Optional[str] = Query(None, description="Filter by product category")
 ):
-    """Get forecast data for charting.
-
-    Returns a dict with keys:
-      - forecast_data: list of forecast rows
-      - model_metrics: list of metrics (mae/mape) per pulau/product_category
-
-    Backwards-compatible: clients expecting a flat list should still be able to
-    consume `forecast_data` property (the frontend handles both shapes).
-    """
+    """Get forecast data for charting."""
     forecasts = data_store["forecasts"]
     metrics = data_store["model_metrics"]
 
@@ -440,14 +446,7 @@ async def get_forecast_metrics(
     pulau: Optional[str] = Query(None, description="Filter by island name"),
     product: Optional[str] = Query(None, description="Filter by product category")
 ):
-    """Return stored model metrics for debugging.
-
-    Example response:
-      [
-        {"pulau": "Bali", "product_category": "Roti", "mae": 15.5, "mape": 12.5, "sample_size": 40},
-        ...
-      ]
-    """
+    """Return stored model metrics for debugging."""
     metrics = data_store["model_metrics"]
 
     # Filter by pulau and product
@@ -489,7 +488,6 @@ async def get_forecast_metrics(
             ]
 
     # Fallback: compute metrics on-the-fly from historical Forecast rows
-    # This ensures the endpoint returns useful data even when persisted metrics are not available.
     historical = [f for f in data_store["forecasts"] if not f.get('is_forecast')]
     
     if pulau:
@@ -639,10 +637,7 @@ async def health_check():
 
 @app.get("/api/debug/products")
 async def debug_products(pulau: Optional[str] = Query(None)):
-    """Return distinct product_category values present in forecasts (for debugging).
-
-    Helps detect casing/whitespace mismatches (returns raw stored strings).
-    """
+    """Return distinct product_category values present in forecasts (for debugging)."""
     forecasts = data_store["forecasts"]
     
     if pulau:
@@ -654,9 +649,7 @@ async def debug_products(pulau: Optional[str] = Query(None)):
 
 
 # ============================================
-# MAIN ENTRY POINT
+# MANGUM HANDLER FOR VERCEL
 # ============================================
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+# This is the entry point for Vercel serverless functions
+handler = Mangum(app, lifespan="off")
