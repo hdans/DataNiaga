@@ -83,12 +83,12 @@ app.add_middleware(
 REQUIRED_COLUMNS = ['InvoiceNo', 'InvoiceDate', 'PULAU', 'PRODUCT_CATEGORY', 'Quantity']
 
 
-def validate_dataframe(df: pd.DataFrame) -> None:
+def validate_dataframe(df) -> None:
     """
     Validate that required columns exist in uploaded DataFrame.
     
     Args:
-        df: Uploaded DataFrame
+        df: Uploaded DataFrame (pandas DataFrame)
         
     Raises:
         HTTPException: If required columns are missing
