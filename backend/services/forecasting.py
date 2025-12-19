@@ -1,11 +1,4 @@
-"""
-Forecasting Service - LightGBM Segregated Models (With Metrics)
-
-Updates:
-- Returns MAE and MAPE scores per Category/Island.
-- Calculates in-sample error (Training Error) for evaluation.
-- Returns structured dictionary: {'forecast_data': [...], 'model_metrics': [...]}
-"""
+"""LightGBM-based forecasting service with per-island models and accuracy metrics"""
 
 import pandas as pd
 import numpy as np
@@ -13,23 +6,20 @@ from datetime import timedelta
 from typing import List, Dict, Any, Tuple
 import warnings
 
-# Library Machine Learning
 from lightgbm import LGBMRegressor
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error
 
 warnings.filterwarnings('ignore')
 
-# ==========================================
-# CONFIGURATION
-# ==========================================
 FORECAST_WEEKS = 10
 LOOK_BACK = 4
 
+
 def is_payday_week(date):
+    """Check if date falls in payday period (25th-5th of month)"""
     day = date.day
-    if day >= 25 or day <= 5: return 1
-    return 0
+    return 1 if (day >= 25 or day <= 5) else 0
 
 def prepare_island_data(df: pd.DataFrame, pulau: str) -> pd.DataFrame:
     df_subset = df[df['PULAU'] == pulau].copy()
@@ -53,10 +43,7 @@ def prepare_island_data(df: pd.DataFrame, pulau: str) -> pd.DataFrame:
     return df_stacked
 
 def train_forecast_model(df: pd.DataFrame, pulau: str) -> Tuple[List[Dict], List[Dict]]:
-    """
-    Returns:
-        (forecasts_list, metrics_list)
-    """
+    """Train LightGBM model for island and return forecasts and metrics"""
     island_data = prepare_island_data(df, pulau)
     if island_data.empty:
         return [], []
@@ -70,31 +57,30 @@ def train_forecast_model(df: pd.DataFrame, pulau: str) -> Tuple[List[Dict], List
     
     cats_in_pulau = island_data['PRODUCT_CATEGORY'].unique()
     
-    # --- A. BUILD TRAINING SET ---
+    # Build training set
     for category in cats_in_pulau:
         sub_cat = island_data[island_data['PRODUCT_CATEGORY'] == category].sort_values('InvoiceDate')
         series = sub_cat['Quantity'].values
         dates = sub_cat['InvoiceDate'].values
         
-        # History Data untuk Output
         for d, val in zip(dates, series):
             forecasts.append({
                 'pulau': pulau,
                 'product_category': category,
                 'week': pd.to_datetime(d),
                 'actual': float(val),
-                'predicted': float(val), # Default fit
+                'predicted': float(val),
                 'is_forecast': 0
             })
 
         series_log = np.log1p(series)
         
-        # Sliding Window
         for i in range(LOOK_BACK, len(series_log) - FORECAST_WEEKS + 1):
             past_window = series_log[i-LOOK_BACK : i]
             future_window = series_log[i : i+FORECAST_WEEKS]
             
-            if len(future_window) < FORECAST_WEEKS: continue
+            if len(future_window) < FORECAST_WEEKS: 
+                continue
             
             feat_mean = np.mean(past_window)
             feat_std = np.std(past_window)
@@ -108,8 +94,6 @@ def train_forecast_model(df: pd.DataFrame, pulau: str) -> Tuple[List[Dict], List
             meta_train.append(category)
 
     if not X_train_all:
-        # Not enough training samples to fit a model. Produce simple fallback
-        # forecasts per category using a naive method (mean of last available values).
         future_start_date = island_data['InvoiceDate'].max() + timedelta(weeks=1)
         future_dates = pd.date_range(start=future_start_date, periods=FORECAST_WEEKS, freq='W')
 
@@ -117,10 +101,8 @@ def train_forecast_model(df: pd.DataFrame, pulau: str) -> Tuple[List[Dict], List
             sub_cat = island_data[island_data['PRODUCT_CATEGORY'] == category].sort_values('InvoiceDate')
             series = sub_cat['Quantity'].values
             if len(series) == 0:
-                # no data to base a forecast on
                 continue
 
-            # Use the mean of the last LOOK_BACK values if available, otherwise mean of all
             last_vals = series[-LOOK_BACK:] if len(series) >= 1 else series
             naive_pred = float(np.mean(last_vals)) if len(last_vals) > 0 else 0.0
             naive_pred = max(naive_pred, 0.0)
@@ -137,7 +119,6 @@ def train_forecast_model(df: pd.DataFrame, pulau: str) -> Tuple[List[Dict], List
 
         return forecasts, metrics
 
-    # --- B. TRAINING ---
     feat_cols = [f'Lag_{j}' for j in range(LOOK_BACK, 0, -1)] + ['Mean', 'Std', 'Is_Payday']
     X_df = pd.DataFrame(X_train_all, columns=feat_cols)
     X_df['CATEGORY'] = pd.Categorical(meta_train, categories=cats_in_pulau)
@@ -147,16 +128,11 @@ def train_forecast_model(df: pd.DataFrame, pulau: str) -> Tuple[List[Dict], List
     model = MultiOutputRegressor(lgbm)
     model.fit(X_df, y_arr)
 
-    # --- C. CALCULATE METRICS (IN-SAMPLE) ---
-    # Prediksi ulang data training untuk melihat seberapa baik model "belajar"
     y_pred_log_train = model.predict(X_df)
     y_pred_train = np.expm1(y_pred_log_train)
     y_true_train = np.expm1(y_arr)
 
-    # Hitung error per kategori
-    # Kita harus map balik index X_df ke kategori
     for cat in cats_in_pulau:
-        # Ambil index baris yang sesuai kategori ini
         indices = [i for i, x in enumerate(meta_train) if x == cat]
         
         if not indices:
@@ -165,10 +141,8 @@ def train_forecast_model(df: pd.DataFrame, pulau: str) -> Tuple[List[Dict], List
         y_true_cat = y_true_train[indices].flatten()
         y_pred_cat = y_pred_train[indices].flatten()
         
-        # Hitung Metrics
         mae = mean_absolute_error(y_true_cat, y_pred_cat)
         
-        # Safe MAPE (handle division by zero)
         mask = y_true_cat != 0
         if np.sum(mask) > 0:
             mape = np.mean(np.abs((y_true_cat[mask] - y_pred_cat[mask]) / y_true_cat[mask]))
@@ -179,11 +153,10 @@ def train_forecast_model(df: pd.DataFrame, pulau: str) -> Tuple[List[Dict], List
             'pulau': pulau,
             'product_category': cat,
             'mae': round(float(mae), 2),
-            'mape': round(float(mape * 100), 2), # Dalam Persen
+            'mape': round(float(mape * 100), 2),
             'sample_size': len(indices)
         })
 
-    # --- D. FORECASTING FUTURE ---
     future_start_date = island_data['InvoiceDate'].max() + timedelta(weeks=1)
     future_dates = pd.date_range(start=future_start_date, periods=FORECAST_WEEKS, freq='W')
 
@@ -218,13 +191,7 @@ def train_forecast_model(df: pd.DataFrame, pulau: str) -> Tuple[List[Dict], List
     return forecasts, metrics
 
 def run_all_forecasts(df: pd.DataFrame) -> Dict[str, List[Any]]:
-    """
-    Returns Dictionary:
-    {
-        'forecast_data': [...], # Data untuk grafik
-        'model_metrics': [...]  # Data untuk tabel akurasi
-    }
-    """
+    """Run forecasts for all islands and return structured results"""
     import traceback
     all_forecasts = []
     all_metrics = []

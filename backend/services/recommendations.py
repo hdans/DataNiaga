@@ -1,9 +1,4 @@
-"""
-Recommendation Service - DSS Logic
-
-Modul ini berisi logika Decision Support System untuk menghasilkan
-rekomendasi berdasarkan hasil forecast dan MBA rules.
-"""
+"""Recommendation service generating DSS insights from forecast and MBA results"""
 
 import pandas as pd
 from typing import List, Dict, Any
@@ -11,10 +6,9 @@ from sqlalchemy.orm import Session
 
 
 def to_title_case(text: str) -> str:
-    """Convert text to title case (e.g., 'KACANG TANAH' -> 'Kacang Tanah', handles commas)"""
+    """Convert text to title case with comma handling"""
     if not text:
         return ''
-    # Split by comma first, title case each part, then rejoin
     parts = text.split(',')
     titled_parts = [' '.join(word.capitalize() for word in part.strip().lower().split()) for part in parts]
     return ', '.join(titled_parts)
@@ -26,24 +20,7 @@ def generate_recommendations(
     rules: List[Dict[str, Any]],
     db: Session = None
 ) -> List[Dict[str, Any]]:
-    """
-    Generate DSS recommendations berdasarkan forecast + MBA.
-    
-    Logika:
-    1. Derived Demand: Jika produk A (Anchor) forecast naik, 
-       cek MBA rules, sarankan stok produk B (Complement)
-    2. Dead Stock: Jika produk X forecast turun,
-       cek MBA rules, sarankan bundling dengan anchor kuat
-    
-    Args:
-        df: DataFrame dengan data transaksi original
-        forecasts: List hasil forecasting
-        rules: List MBA rules
-        db: Database session (optional)
-    
-    Returns:
-        List of recommendation dictionaries
-    """
+    """Generate recommendations based on forecasts and MBA rules"""
     import traceback
     
     try:

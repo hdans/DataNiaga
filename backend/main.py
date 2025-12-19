@@ -1,12 +1,4 @@
-"""
-DataNiaga FastAPI Backend
-=========================
-
-Main application file untuk Retail Decision Support System.
-Endpoints untuk upload data, forecasting, MBA, dan recommendations.
-
-Uses in-memory storage (no database) for single-session analysis workflow.
-"""
+"""DataNiaga FastAPI Backend - Retail Decision Support System with ML Pipeline"""
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,25 +20,20 @@ from services.recommendations import (
     get_bundling_opportunities
 )
 
-# ============================================
-# IN-MEMORY DATA STORE
-# ============================================
-# All data stored in-memory for single session.
-# Data persists until server restart.
+# In-memory data store for single session analysis
 data_store: Dict[str, Any] = {
-    "transactions": None,        # pd.DataFrame - raw uploaded data
-    "forecasts": [],            # list of forecast dicts
-    "mba_rules": [],            # list of MBA rule dicts
-    "recommendations": [],      # list of recommendation dicts
-    "model_metrics": [],        # list of metric dicts
-    "user": None,               # user session info dict
+    "transactions": None,
+    "forecasts": [],
+    "mba_rules": [],
+    "recommendations": [],
+    "model_metrics": [],
+    "user": None,
     "metadata": {
         "last_updated": None,
         "upload_timestamp": None,
     }
 }
 
-# Initialize FastAPI app
 app = FastAPI(
     title="DataNiaga API",
     description="Retail Decision Support System - AI-powered forecasting and recommendations",
@@ -55,14 +42,11 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS configuration for React frontend - MUST be first middleware
-# In production, set ALLOWED_ORIGINS to a comma-separated list, e.g.:
-#   ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://www.yourdomain.com
+# CORS configuration
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
 if allowed_origins_env:
     allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
 else:
-    # Development defaults
     allowed_origins = [
         "http://localhost:5173",
         "http://localhost:3000",
@@ -82,20 +66,11 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Required columns for data validation
 REQUIRED_COLUMNS = ['InvoiceNo', 'InvoiceDate', 'PULAU', 'PRODUCT_CATEGORY', 'Quantity']
 
 
 def validate_dataframe(df: pd.DataFrame) -> None:
-    """
-    Validate that required columns exist in uploaded DataFrame.
-    
-    Args:
-        df: Uploaded DataFrame
-        
-    Raises:
-        HTTPException: If required columns are missing
-    """
+    """Validate required columns exist in DataFrame"""
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
     if missing:
         raise HTTPException(
@@ -104,9 +79,7 @@ def validate_dataframe(df: pd.DataFrame) -> None:
         )
 
 
-# ============================================
-# UPLOAD & PROCESSING ENDPOINTS
-# ============================================
+# Upload & Processing Endpoints
 
 @app.post("/api/upload-data", response_model=UploadResponse)
 async def upload_data(file: UploadFile = File(...)):
@@ -157,7 +130,6 @@ async def upload_data(file: UploadFile = File(...)):
         data_store["model_metrics"] = []
         data_store["metadata"]["upload_timestamp"] = datetime.now().isoformat()
         
-        # Run forecasting pipeline
         print("Starting forecasting pipeline...")
         try:
             forecast_result = run_all_forecasts(df)
@@ -167,25 +139,14 @@ async def upload_data(file: UploadFile = File(...)):
             print(f"Error in forecasting pipeline: {e}")
             raise HTTPException(status_code=500, detail=f"Forecasting pipeline failed: {str(e)}")
 
-        # Store forecasts in memory
-        try:
-            for f in forecast_records:
-                data_store["forecasts"].append(f)
-            print(f"Stored {len(forecast_records)} forecast records in memory")
-        except Exception as e:
-            print(f"Error storing forecasts: {e}")
-            raise HTTPException(status_code=500, detail=f"Error storing forecast data: {str(e)}")
+        for f in forecast_records:
+            data_store["forecasts"].append(f)
+        print(f"Stored {len(forecast_records)} forecast records in memory")
 
-        # Store model metrics in memory
-        try:
-            for m in model_metrics:
-                data_store["model_metrics"].append(m)
-            print(f"Stored {len(model_metrics)} metric entries in memory")
-        except Exception as e:
-            print(f"Error storing metrics: {e}")
-            raise HTTPException(status_code=500, detail=f"Error storing model metrics: {str(e)}")
+        for m in model_metrics:
+            data_store["model_metrics"].append(m)
+        print(f"Stored {len(model_metrics)} metric entries in memory")
         
-        # Run MBA pipeline
         print("Starting MBA pipeline...")
         try:
             rules = run_all_mba(df)
@@ -229,9 +190,7 @@ async def upload_data(file: UploadFile = File(...)):
         )
 
 
-# ============================================
-# USER ENDPOINTS
-# ============================================
+# User Endpoints
 
 @app.post("/api/user", response_model=UserResponse)
 async def create_user(user: UserCreate):
@@ -242,27 +201,23 @@ async def create_user(user: UserCreate):
         "company": user.company,
         "created_at": datetime.now().isoformat()
     }
-    # Generate simple user_id based on timestamp
     user_id = int(datetime.now().timestamp() * 1000) % 1000000
     
     return UserResponse(status="success", user_id=user_id)
 
 
-# ============================================
-# DASHBOARD ENDPOINTS
-# ============================================
+# Dashboard Endpoints
 
 @app.get("/api/dashboard/summary", response_model=DashboardSummary)
 async def get_dashboard_summary(
     pulau: Optional[str] = Query(None, description="Filter by island name for per-region summary")
 ):
-    """Get dashboard summary metrics derived from in-memory data, optionally per pulau."""
+    """Get dashboard summary metrics."""
     forecasts = data_store["forecasts"]
     recommendations = data_store["recommendations"]
     rules = data_store["mba_rules"]
     metrics = data_store["model_metrics"]
 
-    # Filter by pulau if provided
     if pulau:
         pulau_norm = pulau.strip().lower()
         forecasts = [f for f in forecasts if (str(f.get('pulau', '')).strip().lower() == pulau_norm)]
@@ -270,16 +225,13 @@ async def get_dashboard_summary(
         rules = [r for r in rules if (str(r.get('pulau', '')).strip().lower() == pulau_norm)]
         metrics = [m for m in metrics if (str(m.get('pulau', '')).strip().lower() == pulau_norm)]
 
-    # Total Products → distinct product_category from forecasts
     total_products = len({f.get('product_category') for f in forecasts}) if forecasts else 0
     
-    # Total Islands → global count when not filtered; if filtered, 1 (or 0 when empty)
     if pulau:
         total_islands = 1 if forecasts else 0
     else:
         total_islands = len({f.get('pulau') for f in forecasts}) if forecasts else 0
 
-    # Stockout Risk → demand decreasing: next forecast < current forecast per (product_category, pulau)
     stockout_risks = 0
     if forecasts:
         from collections import defaultdict
@@ -295,10 +247,8 @@ async def get_dashboard_summary(
                 if (nxt.get('predicted') or 0) < (cur.get('predicted') or 0):
                     stockout_risks += 1
 
-    # Bundling Opportunities → from MBA rules produced by the model
     bundling_opportunities = len([r for r in rules if r.get('lift') is not None and r.get('lift', 0) >= 1.0])
 
-    # Model Accuracy → from ModelMetric (direct MAPE value); fallback to calculated if metrics absent
     if metrics:
         mape_vals = [m.get('mape') for m in metrics if m.get('mape') is not None]
         accuracy = (sum(mape_vals) / len(mape_vals)) if mape_vals else 0.0
@@ -328,7 +278,6 @@ async def get_dashboard_summary(
 async def get_training_metadata():
     """Get model training metadata."""
     try:
-        # Count historical forecast records (as proxy for training volume)
         forecasts = data_store["forecasts"]
         total_trained = len([f for f in forecasts if not f.get('is_forecast')])
         
@@ -346,28 +295,17 @@ async def get_training_metadata():
         }
 
 
-# ============================================
-# FORECAST ENDPOINTS
-# ============================================
+# Forecast Endpoints
 
 @app.get("/api/forecast")
 async def get_forecast(
     pulau: Optional[str] = Query(None, description="Filter by island name"),
     product: Optional[str] = Query(None, description="Filter by product category")
 ):
-    """Get forecast data for charting.
-
-    Returns a dict with keys:
-      - forecast_data: list of forecast rows
-      - model_metrics: list of metrics (mae/mape) per pulau/product_category
-
-    Backwards-compatible: clients expecting a flat list should still be able to
-    consume `forecast_data` property (the frontend handles both shapes).
-    """
+    """Get forecast data for charting."""
     forecasts = data_store["forecasts"]
     metrics = data_store["model_metrics"]
 
-    # Case-insensitive filtering
     forecast_list = forecasts
     
     if pulau:
@@ -378,17 +316,13 @@ async def get_forecast(
         product_norm = product.strip().lower()
         forecast_list = [f for f in forecast_list if product_norm in str(f.get('product_category', '')).strip().lower()]
     
-    # Sort by week
     forecast_list = sorted(forecast_list, key=lambda f: f.get('week', ''))
 
-    # If no forecast rows were found for the requested pulau+product combination,
-    # try a product-only fallback
     if product and not forecast_list:
         product_norm = product.strip().lower()
         forecast_list = [f for f in data_store["forecasts"] if product_norm in str(f.get('product_category', '')).strip().lower()]
         forecast_list = sorted(forecast_list, key=lambda f: f.get('week', ''))
 
-    # Format forecast list
     formatted_forecasts = [
         {
             'week': f.get('week'),
@@ -401,7 +335,6 @@ async def get_forecast(
         for f in forecast_list
     ]
 
-    # Get metrics (case-insensitive match)
     metrics_list = metrics
     
     if pulau:
@@ -412,8 +345,6 @@ async def get_forecast(
         product_norm = product.strip().lower()
         metrics_list = [m for m in metrics_list if product_norm in str(m.get('product_category', '')).strip().lower()]
 
-    # Fallback: if caller requested a specific product but no metrics were found,
-    # try a product-only match
     if product and not metrics_list:
         product_norm = product.strip().lower()
         metrics_list = [m for m in data_store["model_metrics"] if product_norm in str(m.get('product_category', '')).strip().lower()]
@@ -440,17 +371,9 @@ async def get_forecast_metrics(
     pulau: Optional[str] = Query(None, description="Filter by island name"),
     product: Optional[str] = Query(None, description="Filter by product category")
 ):
-    """Return stored model metrics for debugging.
-
-    Example response:
-      [
-        {"pulau": "Bali", "product_category": "Roti", "mae": 15.5, "mape": 12.5, "sample_size": 40},
-        ...
-      ]
-    """
+    """Get model metrics for forecast accuracy evaluation."""
     metrics = data_store["model_metrics"]
 
-    # Filter by pulau and product
     if pulau:
         pulau_norm = pulau.strip().lower()
         metrics = [m for m in metrics if str(m.get('pulau', '')).strip().lower() == pulau_norm]
@@ -471,8 +394,6 @@ async def get_forecast_metrics(
             for m in sorted(metrics, key=lambda m: (m.get('pulau', ''), m.get('product_category', '')))
         ]
 
-    # If product was requested but no metrics found for the given pulau,
-    # try returning any metrics that match the product across all pulau values.
     if product:
         product_norm = product.strip().lower()
         alt_metrics = [m for m in data_store["model_metrics"] if product_norm in str(m.get('product_category', '')).strip().lower()]
@@ -488,8 +409,6 @@ async def get_forecast_metrics(
                 for m in sorted(alt_metrics, key=lambda m: (m.get('pulau', ''), m.get('product_category', '')))
             ]
 
-    # Fallback: compute metrics on-the-fly from historical Forecast rows
-    # This ensures the endpoint returns useful data even when persisted metrics are not available.
     historical = [f for f in data_store["forecasts"] if not f.get('is_forecast')]
     
     if pulau:
@@ -503,7 +422,6 @@ async def get_forecast_metrics(
     if not historical:
         return []
 
-    # Aggregate per (pulau, product_category)
     agg = {}
     for h in historical:
         key = (h.get('pulau'), h.get('product_category'))
@@ -537,9 +455,7 @@ async def get_forecast_metrics(
     return results
 
 
-# ============================================
-# MBA ENDPOINTS
-# ============================================
+# MBA Endpoints
 
 @app.get("/api/mba-rules", response_model=List[MBARuleResponse])
 async def get_mba_rules(
@@ -568,9 +484,7 @@ async def get_mba_rules(
     ]
 
 
-# ============================================
-# RECOMMENDATION ENDPOINTS
-# ============================================
+# Recommendation Endpoints
 
 @app.get("/api/recommendations", response_model=List[RecommendationResponse])
 async def get_recommendations(
@@ -601,9 +515,7 @@ async def get_recommendations(
     ]
 
 
-# ============================================
-# UTILITY ENDPOINTS
-# ============================================
+# Utility Endpoints
 
 @app.get("/api/islands", response_model=List[str])
 async def get_islands():
@@ -627,7 +539,7 @@ async def get_products(pulau: Optional[str] = Query(None)):
 
 @app.get("/")
 async def root():
-    """Root endpoint to verify backend is running."""
+    """Health check - verify backend is running."""
     return {"message": "DataNiaga API is running", "version": "1.0.0"}
 
 
@@ -639,10 +551,7 @@ async def health_check():
 
 @app.get("/api/debug/products")
 async def debug_products(pulau: Optional[str] = Query(None)):
-    """Return distinct product_category values present in forecasts (for debugging).
-
-    Helps detect casing/whitespace mismatches (returns raw stored strings).
-    """
+    """Get distinct product categories for debugging."""
     forecasts = data_store["forecasts"]
     
     if pulau:
@@ -652,10 +561,6 @@ async def debug_products(pulau: Optional[str] = Query(None)):
     products = list(set(f.get('product_category') for f in forecasts if f.get('product_category')))
     return [p for p in products if p]
 
-
-# ============================================
-# MAIN ENTRY POINT
-# ============================================
 
 if __name__ == "__main__":
     import uvicorn
